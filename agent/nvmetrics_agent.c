@@ -54,8 +54,12 @@ static NV00DE_SHARED_DATA *rusd_map(void)
                                    NV00DE_RUSD_POLL_THERMAL | NV00DE_RUSD_POLL_FAN | NV00DE_RUSD_POLL_MEMORY };
     NvU32 st = nvRmApiAlloc(&rm, hSub, &hRusd, RM_USER_SHARED_DATA, &rp);
     if (st != NV_OK) { fprintf(stderr, "nvmetrics-agent: the resource manager refused the shared-data block (0x%x)\n", st); return NULL; }
+    /* The block is system memory the resource manager creates user-read-only (attr2 PROTECTION_USER_READ_ONLY in
+       gpushareddataConstruct), and memMap refuses a user mapping of such memory unless it asks for read-only access:
+       a read-write request is NV_ERR_INVALID_ARGUMENT (0x1f). The kext then maps it with kIOMapReadOnly. */
     struct NvRmApiMapping map; memset(&map, 0, sizeof map);
-    st = nvRmApiMapMemory(&rm, hDevice, hRusd, 0, sizeof(NV00DE_SHARED_DATA), false, 0, &map);
+    st = nvRmApiMapMemory(&rm, hDevice, hRusd, 0, sizeof(NV00DE_SHARED_DATA), true,
+                          DRF_DEF(OS33, _FLAGS, _ACCESS, _READ_ONLY), &map);
     if (st != NV_OK || !map.address) { fprintf(stderr, "nvmetrics-agent: cannot map the shared-data block (0x%x)\n", st); return NULL; }
     return (NV00DE_SHARED_DATA *)map.address;
 }
