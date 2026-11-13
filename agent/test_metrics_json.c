@@ -40,7 +40,7 @@ int main(void)
     d.avgPowerUsage.lastModifiedTimestamp = 100; d.avgPowerUsage.info.averageGpuPower = 21000;
     d.powerLimitGpu.lastModifiedTimestamp = 100; d.powerLimitGpu.info.enforcedmW = 130000;
     d.clkPublicDomainInfos.lastModifiedTimestamp = 100; d.clkPublicDomainInfos.info[0].actualClkKHz = 1904600; d.clkPublicDomainInfos.info[1].actualClkKHz = 10001000;
-    d.perfCurrentPstate.lastModifiedTimestamp = 100; d.perfCurrentPstate.currentPstate = 0;
+    d.perfCurrentPstate.lastModifiedTimestamp = 100; d.perfCurrentPstate.currentPstate = 0x1;   /* NV2080_CTRL_PERF_PSTATES_P0 */
     d.perfDevUtil.lastModifiedTimestamp = 100; d.perfDevUtil.info.gpuPercentBusy = 3;
     d.perfDevUtil.info.engUtil[RUSD_ENG_UTILIZATION_VID_ENG_NVENC].clkPercentBusy = 12;
     d.clkThrottleInfo.lastModifiedTimestamp = 100; d.clkThrottleInfo.reasonMask = RUSD_CLK_THROTTLE_REASON_GPU_IDLE | RUSD_CLK_THROTTLE_REASON_SW_THERMAL_SLOWDOWN;
@@ -52,7 +52,17 @@ int main(void)
     arm("power in mW is printed in W", strstr(s, "\"power_w\":23.45,") && strstr(s, "\"power_avg_w\":21.00,") && strstr(s, "\"power_limit_w\":130.00,"));
     arm("clocks kHz -> MHz, rounded", strstr(s, "\"clock_gpu_mhz\":1905,") && strstr(s, "\"clock_mem_mhz\":10001,"));
     arm("a clock domain that reads 0 kHz is null, not 0 MHz", strstr(s, "\"clock_sm_mhz\":null,") != 0);
-    arm("P0 is printed as 0, not null", strstr(s, "\"pstate\":0,") != 0);
+    arm("the pstate mask P0 (0x1) is printed as 0, not null", strstr(s, "\"pstate\":0,") != 0);
+    d.perfCurrentPstate.currentPstate = 0x20;
+    arm("the pstate mask 0x20 is P5 (read on Isaac's card after idle mode)", strstr(render(&d), "\"pstate\":5,") != 0);
+    d.perfCurrentPstate.currentPstate = 0x100;
+    arm("0x100 is P8", strstr(render(&d), "\"pstate\":8,") != 0);
+    d.perfCurrentPstate.currentPstate = 0x3;
+    arm("two bits at once is null", strstr(render(&d), "\"pstate\":null,") != 0);
+    d.perfCurrentPstate.currentPstate = 0x10000;
+    arm("a bit above P15 is null", strstr(render(&d), "\"pstate\":null,") != 0);
+    d.perfCurrentPstate.currentPstate = 0x1;
+    s = render(&d);
     arm("utilisation, encoder included", strstr(s, "\"util_gpu_pct\":3,") && strstr(s, "\"util_enc_pct\":12,"));
     arm("throttle reasons are named", strstr(s, "\"throttle\":[\"idle\",\"sw_thermal\"]") != 0);
     arm("a stopped fan before a turning one is kept as 0", strstr(s, "\"fan_rpm\":[0,1450]") != 0);

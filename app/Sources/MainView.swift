@@ -45,6 +45,7 @@ struct MainView: View {
                                  value: item.element == 0 ? "parado" : "\(item.element) RPM")
                     }
                     if s?.fan_rpm == nil { InfoLine(name: "Velocidad", value: "--") }
+                    else if fans.isEmpty { InfoLine(name: "Velocidad", value: "parados") }
                     InfoLine(name: "VRAM", value: vram(s))
                     Text("Los ventiladores los gobierna la propia tarjeta con su curva interna; el driver no puede cambiarlos. Muchas paran por debajo de unos 60 °C.")
                         .font(.system(size: 10)).foregroundStyle(th.label).fixedSize(horizontal: false, vertical: true)
@@ -146,11 +147,18 @@ struct MenuContent: View {
         Text("Temperatura: \(Fmt.num(s?.temp_gpu_c, 0)) °C")
         Text("Consumo: \(Fmt.num(s?.power_w, 0)) W · \(s?.pstate.map { "P\($0)" } ?? "--")")
         Text("Reloj: \(Fmt.int(s?.clock_gpu_mhz)) MHz · Uso: \(Fmt.int(s?.util_gpu_pct)) %")
-        Text("Ventilador: \(s?.fan_rpm?.first.map { $0 == 0 ? "parado" : "\($0) RPM" } ?? "--")")
+        Text("Ventilador: \(fanText(s?.fan_rpm))")
         if let p = agent.problem, s == nil { Text(p) }
         Divider()
         Button("Abrir NVMetrics") { openWindow(id: "main"); NSApp.activate(ignoringOtherApps: true) }
             .keyboardShortcut("o")
         Button("Salir") { NSApp.terminate(nil) }.keyboardShortcut("q")
+    }
+
+    /// nil: no reading; empty: every fan stopped (the shared block lists coolers only up to the last that turns)
+    private func fanText(_ rpm: [Int]?) -> String {
+        guard let rpm else { return "--" }
+        guard let top = rpm.max(), top > 0 else { return "parados" }
+        return "\(top) RPM"
     }
 }

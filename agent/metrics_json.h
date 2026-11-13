@@ -62,7 +62,11 @@ static inline void nvm_json(const NV00DE_SHARED_DATA *d, unsigned long long now_
         else fprintf(f, "\"clock_%s_mhz\":null,", dom[i]);
     }
 
-    if (nvm_ok(d->perfCurrentPstate.lastModifiedTimestamp)) fprintf(f, "\"pstate\":%u,", (unsigned)d->perfCurrentPstate.currentPstate);
+    /* currentPstate comes from PERF_GET_CURRENT_PSTATE: a one-bit mask, NV2080_CTRL_PERF_PSTATES_P0 (0x1) ... P15
+       (0x8000), not the number. Anything but exactly one bit in that range is null. */
+    NvU32 psm = d->perfCurrentPstate.currentPstate;
+    if (nvm_ok(d->perfCurrentPstate.lastModifiedTimestamp) && psm && psm <= 0x8000u && !(psm & (psm - 1)))
+        fprintf(f, "\"pstate\":%d,", __builtin_ctz(psm));
     else fprintf(f, "\"pstate\":null,");
 
     if (nvm_ok(d->perfDevUtil.lastModifiedTimestamp)) {
