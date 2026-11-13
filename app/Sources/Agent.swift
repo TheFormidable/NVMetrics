@@ -16,8 +16,8 @@ final class Agent: ObservableObject {
     private var stopping = false
     private let decoder = JSONDecoder()
 
-    static var resources: URL { Bundle.main.resourceURL ?? URL(fileURLWithPath: ".") }
-    static var agentPath: String { resources.appendingPathComponent("nvmetrics-agent").path }
+    nonisolated static var resources: URL { Bundle.main.resourceURL ?? URL(fileURLWithPath: ".") }
+    nonisolated static var agentPath: String { resources.appendingPathComponent("nvmetrics-agent").path }
 
     func start() {
         stopping = false
@@ -32,17 +32,22 @@ final class Agent: ObservableObject {
         let out = Pipe(), err = Pipe()
         p.standardOutput = out
         p.standardError = err
-        out.fileHandleForReading.readabilityHandler = { [weak self] h in
+        // the handlers run on Foundation's own threads; they hop to the main actor with a constant reference (the
+        // Agent lives as long as the app)
+        let me = self
+        out.fileHandleForReading.readabilityHandler = { h in
             let chunk = h.availableData
-            Task { @MainActor in self?.take(chunk) }
+            if chunk.isEmpty { h.readabilityHandler = nil; return }
+            Task { @MainActor in me.take(chunk) }
         }
-        err.fileHandleForReading.readabilityHandler = { [weak self] h in
+        err.fileHandleForReading.readabilityHandler = { h in
             let chunk = h.availableData
-            guard !chunk.isEmpty, let text = String(data: chunk, encoding: .utf8) else { return }
-            Task { @MainActor in self?.problem = Agent.explain(text) }
+            if chunk.isEmpty { h.readabilityHandler = nil; return }
+            guard let text = String(data: chunk, encoding: .utf8) else { return }
+            Task { @MainActor in me.problem = Agent.explain(text) }
         }
-        p.terminationHandler = { [weak self] _ in
-            Task { @MainActor in self?.ended() }
+        p.terminationHandler = { _ in
+            Task { @MainActor in me.ended() }
         }
         do { try p.run(); process = p } catch { problem = "No se pudo iniciar nvmetrics-agent: \(error.localizedDescription)" }
     }
@@ -60,7 +65,10 @@ final class Agent: ObservableObject {
         guard !stopping else { return }
         let delay = retryDelay
         retryDelay = min(retryDelay * 2, 30)
-        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in self?.start() }
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            if !self.stopping { self.start() }
+        }
     }
 
     private func take(_ chunk: Data) {
@@ -79,7 +87,7 @@ final class Agent: ObservableObject {
         }
     }
 
-    static func explain(_ stderr: String) -> String {
+    nonisolated static func explain(_ stderr: String) -> String {
         if stderr.contains("cannot open") { return "El driver NullMoth no está cargado: no hay lecturas." }
         if stderr.contains("no GPU") { return "El driver no ve ninguna gráfica." }
         if stderr.contains("shared-data") { return "El driver no entregó el bloque de métricas." }

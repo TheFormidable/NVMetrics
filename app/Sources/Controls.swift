@@ -12,7 +12,7 @@ final class Controls: ObservableObject {
     @Published private(set) var busy = false
     @Published var message: String?
 
-    private var setting: String { Agent.resources.appendingPathComponent("nvmetrics-setting.sh").path }
+    nonisolated private var setting: String { Agent.resources.appendingPathComponent("nvmetrics-setting.sh").path }
 
     func refresh() {
         Task.detached { [setting] in
@@ -20,7 +20,7 @@ final class Controls: ObservableObject {
             let e = Controls.run(Agent.agentPath, ["eco", "status"])
             await MainActor.run {
                 self.reposo = Controls.field(r, "reposo").map { $0 == "on" }
-                self.eco = Controls.field(e, "eco").flatMap { $0 == "on" ? true : $0 == "off" ? false : nil }
+                self.eco = Controls.onOff(Controls.field(e, "eco"))
             }
         }
     }
@@ -36,13 +36,13 @@ final class Controls: ObservableObject {
     func setEco(_ on: Bool) {
         admin([Agent.agentPath, "eco", on ? "on" : "off"]) { out in
             let state = Controls.field(out, "eco")
-            self.eco = state.flatMap { $0 == "on" ? true : $0 == "off" ? false : nil }
+            self.eco = Controls.onOff(state)
             if state == nil { self.message = "La gráfica no aceptó el modo eco." }
             else { self.message = on ? "Modo eco activo: la gráfica no pasa de su potencia nominal." : "Modo eco desactivado." }
         }
     }
 
-    private func admin(_ argv: [String], done: @escaping @MainActor (String) -> Void) {
+    private func admin(_ argv: [String], done: @escaping @MainActor @Sendable (String) -> Void) {
         busy = true
         Task.detached {
             let cmd = argv.map(Controls.shellQuote).joined(separator: " ")
@@ -78,6 +78,13 @@ final class Controls: ObservableObject {
         let e = err.fileHandleForReading.readDataToEndOfFile()
         p.waitUntilExit()
         return (p.terminationStatus, String(data: o, encoding: .utf8) ?? "", String(data: e, encoding: .utf8) ?? "")
+    }
+
+    /// "on" -> true, "off" -> false, anything else (null, "other", nothing) -> unknown
+    nonisolated static func onOff(_ s: String?) -> Bool? {
+        if s == "on" { return true }
+        if s == "off" { return false }
+        return nil
     }
 
     /// a string field of the one-line JSON the helpers print, or nil

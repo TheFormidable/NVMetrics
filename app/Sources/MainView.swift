@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 struct MainView: View {
     @EnvironmentObject var agent: Agent
@@ -38,8 +39,10 @@ struct MainView: View {
                     }
                 }
                 Card(icon: "fanblades.fill", title: "Ventilador") {
-                    ForEach(Array((s?.fan_rpm ?? []).enumerated()), id: \.offset) { i, rpm in
-                        InfoLine(name: (s?.fan_rpm?.count ?? 0) > 1 ? "Ventilador \(i + 1)" : "Velocidad", value: rpm == 0 ? "parado" : "\(rpm) RPM")
+                    let fans = s?.fan_rpm ?? []
+                    ForEach(Array(fans.enumerated()), id: \.offset) { item in
+                        InfoLine(name: fans.count > 1 ? "Ventilador \(item.offset + 1)" : "Velocidad",
+                                 value: item.element == 0 ? "parado" : "\(item.element) RPM")
                     }
                     if s?.fan_rpm == nil { InfoLine(name: "Velocidad", value: "--") }
                     InfoLine(name: "VRAM", value: vram(s))

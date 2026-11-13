@@ -52,5 +52,5 @@ enum Fmt {
         guard let v else { return "--" }
         return String(format: "%.\(digits)f", v)
     }
-    static func int(_ v: Int?) -> String { v.map(String.init) ?? "--" }
+    static func int(_ v: Int?) -> String { v.map { String($0) } ?? "--" }
 }
