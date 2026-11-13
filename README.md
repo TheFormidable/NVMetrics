@@ -36,14 +36,18 @@ parte cerrada, y los ventiladores los lleva el firmware de la tarjeta. La app no
 
 ## Compilar (en el Mac)
 
-`nvmetrics-agent` enlaza la capa del gestor de recursos de NVK que trae el driver, así que necesita el árbol de Mesa
-que parchea el `build.sh` del driver:
+Solo hace falta Xcode, git y conexión, más una copia del repo del driver
+([TheFormidable/nvidia-macos-driver](https://github.com/TheFormidable/nvidia-macos-driver)):
 
-    app/build_app.sh <árbol de Mesa parcheado por el build.sh del driver> <carpeta de salida>
+    app/build_app.sh <copia del repo del driver> <carpeta de salida>
 
-`nvmetrics-agent` también se puede usar solo: `nvmetrics-agent once`, `nvmetrics-agent watch 1000`,
-`nvmetrics-agent eco status`, y como root `nvmetrics-agent eco on|off`.
+No necesita el árbol de NVK ni Homebrew. `agent/extract_rm_layer.py` reconstruye la capa del driver que habla con la
+tarjeta (`nvRmApi.c`, `nvrm_xnu.c` y sus cabeceras) a partir de los parches de NVK del propio driver, en el mismo
+orden que `build/build_nvk.sh`. `agent/fetch_headers.sh` baja las cabeceras de NVIDIA igual que el driver (610.57.04
+con sus parches) y, aparte, la disposición del bloque de métricas de 620.70.06, que es la que publica el kext: en 620
+hay una sección nueva en medio del bloque, y con la de 610 el consumo y el ventilador se leerían de otro sitio. Lo
+descargado queda en `build/` y se reutiliza.
 
 ## Pruebas (cualquier sistema, sin gráfica)
 
-    ./run_tests.sh <open-gpu-kernel-modules en la etiqueta 620.70.06>
+    ./run_tests.sh <copia del repo del driver>

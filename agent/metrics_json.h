@@ -6,7 +6,17 @@
 #ifndef NVMETRICS_JSON_H
 #define NVMETRICS_JSON_H
 #include <stdio.h>
+#include <string.h>
+/* NVIDIA's header lets a user-space reader bring its own fence and copy (its default pulls in nvintrin.h, which the
+   610 header tree NVK builds against does not have) */
+#define RUSD_CUSTOM_INTRINSICS 1
+static inline void RusdFenceFunction(void) { __atomic_thread_fence(__ATOMIC_ACQUIRE); }
+static inline void RusdCopyFunction(void *dst, const void *src, unsigned long long n) { memcpy(dst, src, (size_t)n); }
 #include "class/cl00de.h"
+
+/* the kext runs resource manager 620, whose block has a memory-bank section that 610 lacks; built against the 610 layout
+   every field after it (power, fan) would be read from the wrong place. fetch_headers.sh puts the 620 layout first. */
+typedef char nvm_needs_the_620_shared_data_layout[sizeof(((NV00DE_SHARED_DATA *)0)->memBankRemap) > 0 ? 1 : -1];
 
 static inline int nvm_ok(NvU64 ts) { return RUSD_SEQ_DATA_VALID(ts) ? 1 : 0; }
 

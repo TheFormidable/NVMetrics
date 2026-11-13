@@ -1,9 +1,9 @@
 #!/bin/bash
-# build_app.sh <patched Mesa tree> <out dir>: builds NVMetrics.app (x86_64, macOS 14+) into <out dir>.
-# The Mesa tree is the one ./build.sh patches for NVK (it carries the resource-manager layer nvmetrics-agent links).
-# Needs Xcode's command-line tools; installs nothing and touches nothing outside <out dir>.
+# build_app.sh <driver checkout> <out dir>: builds NVMetrics.app (x86_64, macOS 14+) into <out dir>.
+# The driver checkout (TheFormidable/nvidia-macos-driver) supplies the resource-manager layer nvmetrics-agent links
+# (agent/build.sh). Needs Xcode, git and network; installs nothing and writes only to <out dir> and build/.
 set -euo pipefail
-T=${1:?patched Mesa tree}; OUT=${2:?output folder}
+T=${1:?driver checkout}; OUT=${2:?output folder}
 H=$(cd "$(dirname "$0")" && pwd)
 APP="$OUT/NVMetrics.app"
 rm -rf "$APP"; mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
