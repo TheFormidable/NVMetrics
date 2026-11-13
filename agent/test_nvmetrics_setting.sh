@@ -11,7 +11,7 @@ arm "status reads the shipped line (boost on = reposo off)" '[ "$($S reposo stat
 arm "on prints the new state" '[ "$($S reposo on $C)" = "{\"reposo\":\"on\"}" ]'
 arm "on adds a user block at the end with the key" '[ "$(tail -n 3 $C | tr "\n" "|")" = "# --- my settings, kept on update ---|NVRM_610_BOOST=0|# --- end my settings ---|" ]'
 arm "the shipped lines are untouched" '[ "$(head -n 3 $C | tr "\n" "|")" = "NVMTL_A=1|NVRM_610_BOOST=1|NVK_B=2|" ]'
-arm "mode is kept" '[ "$(stat -c %a $C)" = 644 ]'
+arm "mode is kept" '[ "$( [ "$(uname)" = Darwin ] && stat -f %Lp $C || stat -c %a $C)" = 644 ]'
 $S reposo on $C >/dev/null
 arm "on twice keeps one line" '[ $(grep -c "^NVRM_610_BOOST=0" $C) = 1 ]'
 arm "off takes our line out and status follows the shipped value" '[ "$($S reposo off $C)" = "{\"reposo\":\"off\"}" ] && ! grep -q "^NVRM_610_BOOST=0" $C'
