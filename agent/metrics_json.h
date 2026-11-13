@@ -56,7 +56,9 @@ static inline void nvm_json(const NV00DE_SHARED_DATA *d, unsigned long long now_
     static const char *const dom[RUSD_CLK_PUBLIC_DOMAIN_MAX_TYPE] = { "gpu", "mem", "video", "sm" };
     int clk = nvm_ok(d->clkPublicDomainInfos.lastModifiedTimestamp);
     for (int i = 0; i < RUSD_CLK_PUBLIC_DOMAIN_MAX_TYPE; i++) {
-        if (clk) fprintf(f, "\"clock_%s_mhz\":%u,", dom[i], (unsigned)((d->clkPublicDomainInfos.info[i].actualClkKHz + 500) / 1000));
+        /* a domain the board does not report reads 0 kHz (the SM domain on an RTX 5050); a running clock is never 0 */
+        NvU32 khz = d->clkPublicDomainInfos.info[i].actualClkKHz;
+        if (clk && khz) fprintf(f, "\"clock_%s_mhz\":%u,", dom[i], (unsigned)((khz + 500) / 1000));
         else fprintf(f, "\"clock_%s_mhz\":null,", dom[i]);
     }
 

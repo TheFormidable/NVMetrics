@@ -51,6 +51,7 @@ int main(void)
     arm("a sensor that reads exactly 0 is a missing sensor, null", strstr(s, "\"temp_mem_c\":null") != 0);
     arm("power in mW is printed in W", strstr(s, "\"power_w\":23.45,") && strstr(s, "\"power_avg_w\":21.00,") && strstr(s, "\"power_limit_w\":130.00,"));
     arm("clocks kHz -> MHz, rounded", strstr(s, "\"clock_gpu_mhz\":1905,") && strstr(s, "\"clock_mem_mhz\":10001,"));
+    arm("a clock domain that reads 0 kHz is null, not 0 MHz", strstr(s, "\"clock_sm_mhz\":null,") != 0);
     arm("P0 is printed as 0, not null", strstr(s, "\"pstate\":0,") != 0);
     arm("utilisation, encoder included", strstr(s, "\"util_gpu_pct\":3,") && strstr(s, "\"util_enc_pct\":12,"));
     arm("throttle reasons are named", strstr(s, "\"throttle\":[\"idle\",\"sw_thermal\"]") != 0);
