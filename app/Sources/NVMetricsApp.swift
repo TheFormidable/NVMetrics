@@ -1,5 +1,6 @@
 // NVMetrics: a menu-bar monitor for NVIDIA cards on the NullMoth driver. The menu bar shows the GPU temperature; the
-// window shows clocks, power, temperatures, fan, VRAM and the two switches the driver really has (reposo, eco).
+// window shows clocks, power, temperatures, fan, VRAM, the two switches the driver really has (reposo, eco), when to
+// ask the GPU for full clocks (boost, held by the agent only while the app runs) and the 3.0 driver's health counters.
 // It follows macOS light / dark mode. All the driver work is in nvmetrics-agent and nvmetrics-setting.sh.
 import SwiftUI
 

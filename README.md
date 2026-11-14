@@ -1,8 +1,8 @@
 # NVMetrics
 
 Monitor de la gráfica para el driver [NullMoth](https://github.com/TheFormidable/nvidia-macos-driver) en macOS: un icono en la barra de menús con la temperatura y una ventana con
-relojes, consumo, temperaturas, ventilador, VRAM y los dos interruptores que el driver de verdad permite. Sigue el modo
-claro u oscuro de macOS.
+relojes, consumo, temperaturas, ventilador, VRAM, los controles que el driver de verdad permite y, con el driver 3.0, su salud. Sigue el
+modo claro u oscuro de macOS.
 
 ## Qué lee
 
@@ -21,13 +21,43 @@ se muestra como `--`, nunca como un cero.
   cliente GLOBAL, acción FORCE_LIMIT, el interruptor que NVIDIA documenta para herramientas de usuario). Al quitarlo se
   envía DEFAULT y decide el driver. Se aplica al momento.
 
-Los dos piden la contraseña de administrador.
+Estos dos piden la contraseña de administrador.
+
+- **Rendimiento de la GPU** (Ahorro, Automático o Máximo): cuándo NVMetrics pide a la tarjeta sus relojes máximos
+  (`NV2080_CTRL_CMD_PERF_BOOST`, "boost to max", la misma orden que `tools/nvmtl-boost` del driver). *Ahorro* nunca
+  los pide. *Automático* (el modo de partida) los pide cuando la GPU lleva unos 2 s trabajando de verdad (35 % de uso
+  o más, un juego por ejemplo) y deja de pedirlos cuando lleva 15 s tranquila (menos del 15 %). *Máximo* los pide todo
+  el rato. Se aplica al momento y **no pide contraseña**: el driver deja hacer esa petición a cualquier usuario. Dura
+  solo mientras NVMetrics está en marcha (cerrar la ventana no basta: sigue en la barra de menús); al salir con Salir del
+  menú (también si se cierra de golpe o lo fuerzas a salir) el driver la retira solo. Solo cambia algo con el
+  modo reposo activado; sin él, el propio driver ya tiene la tarjeta a tope casi siempre. La tarjeta sigue respetando
+  sus límites de temperatura y potencia.
+
+## Salud del driver
+
+Con el driver 3.0, la ventana muestra los contadores que el propio driver lleva desde el último arranque del Mac
+(sysctls `debug.nvrm_*`, se leen sin permisos): errores de la GPU (Xid) y el último, apps que el driver rescató tras un
+fallo, apps que perdieron la GPU, fallos del firmware de la tarjeta, avisos internos del driver y ajustes de arranque
+del driver fuera de lo normal (con la lista, donde `!` marca los que una instalación normal no necesita). Cero es lo
+normal; un número mayor sale en ámbar. Con el driver 2.9 esos contadores no existen y el panel dice "Disponible con el
+driver 3.0.".
 
 ## Qué no puede hacer
 
-Velocidad o curva de ventiladores, límite de potencia en %, límite de temperatura, subir o bajar relojes y voltaje. El
+Velocidad o curva de ventiladores, límite de potencia en %, límite de temperatura, mover los relojes por encima o por debajo de los de fábrica (offsets) y voltaje. El
 gestor de recursos abierto de NVIDIA (open-gpu-kernel-modules 620.70.06) no tiene esas órdenes: NVIDIA las guarda en su
 parte cerrada, y los ventiladores los lleva el firmware de la tarjeta. La app no muestra controles que no funcionarían.
+
+## El agente desde Terminal
+
+    nvmetrics-agent watch [ms] [--control]   una línea JSON por lectura (por defecto cada 1000 ms)
+    nvmetrics-agent once                     una sola línea
+    nvmetrics-agent boost hold               pide relojes máximos hasta Ctrl-C (para probar; sin contraseña)
+
+Cada línea lleva `"health"` (`null` antes del driver 3.0). Con `--control`, que es como lo lanza la app, el agente lee
+órdenes de su entrada estándar, una por línea: `boost off`, `boost auto` o `boost max`, y cada línea lleva también
+`"boost":{"mode":...,"held":true|false,"error":null|"0x..."}`. Al cerrarse su entrada estándar (la app se fue) o al
+recibir SIGTERM retira la petición y termina.
 
 ## Estructura
 

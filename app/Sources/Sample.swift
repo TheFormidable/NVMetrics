@@ -24,6 +24,8 @@ struct Sample: Decodable, Equatable {
     var fan_rpm: [Int]?
     var vram_total_mib: Int?
     var vram_used_mib: Int?
+    var health: Health?            // null or missing: the driver has no health counters (before 3.0) or an older agent
+    var boost: BoostState?         // only with "watch --control"
 
     var date: Date { Date(timeIntervalSince1970: t / 1000) }
 
@@ -45,6 +47,31 @@ struct Sample: Decodable, Equatable {
         guard let list = throttle else { return false }
         return list.contains { ["sw_thermal", "hw_thermal", "hw_slowdown", "power_brake"].contains($0) }
     }
+}
+
+/// The 3.0 driver's own counters (debug.nvrm_* sysctls), all since the Mac started. null: that counter is missing, or
+/// for xid_last / chan_last_kind / bugcheck_last: nothing happened yet.
+struct Health: Decodable, Equatable {
+    var xid_count: Int?
+    var xid_last: Int?
+    var chan_recovered: Int?
+    var chan_gave_up: Int?
+    var chan_dropped: Int?
+    var chan_kicks: Int?
+    var chan_last_kind: Int?
+    var bugchecks: Int?
+    var bugcheck_last: Int?
+    var rm_asserts: Int?
+    var switches_nondefault: Int?
+    var switches: String?
+    var fence_state: Int?
+}
+
+/// What the agent is doing with the GPU's "boost to max" request (watch --control).
+struct BoostState: Decodable, Equatable {
+    var mode: String?              // "off" | "auto" | "max"
+    var held: Bool?
+    var error: String?             // "0x<RM status>" when the driver refused the last request
 }
 
 enum Fmt {

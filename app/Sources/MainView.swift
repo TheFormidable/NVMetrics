@@ -53,6 +53,11 @@ struct MainView: View {
             }
             .frame(height: 250)
             modes(th)
+            HStack(alignment: .top, spacing: 12) {
+                BoostCard().frame(maxWidth: .infinity)
+                HealthCard(health: s?.health, hasReadings: s != nil).frame(maxWidth: .infinity)
+            }
+            .fixedSize(horizontal: false, vertical: true)
             if let m = controls.message {
                 Text(m).font(.system(size: 12)).foregroundStyle(th.text).frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -150,6 +155,10 @@ struct MenuContent: View {
         Text("Ventilador: \(fanText(s?.fan_rpm))")
         if let p = agent.problem, s == nil { Text(p) }
         Divider()
+        // a Picker in a menu-style MenuBarExtra is a submenu with a checkmark on the current mode
+        Picker("Rendimiento de la GPU", selection: $agent.boostMode) {
+            ForEach(BoostMode.allCases, id: \.self) { m in Text(m.label).tag(m) }
+        }
         Button("Abrir NVMetrics") { openWindow(id: "main"); NSApp.activate(ignoringOtherApps: true) }
             .keyboardShortcut("o")
         Button("Salir") { NSApp.terminate(nil) }.keyboardShortcut("q")

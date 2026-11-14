@@ -76,6 +76,20 @@ int main(void)
     d.pmaMemoryInfo.lastModifiedTimestamp = RUSD_SEQ_START + 4; d.pmaMemoryInfo.freePmaMemory = (8ull << 30) + 1;
     arm("free larger than total (garbage) is null, not a wrapped number", strstr(render(&d), "\"vram_used_mib\":null") != 0);
 
+    /* open + extra keys + close, as the agent appends "health" and "boost" */
+    static char whole[8192], parts[8192];
+    memset(whole, 0, sizeof whole); memset(parts, 0, sizeof parts);
+    FILE *f = fmemopen(whole, sizeof whole, "w"); nvm_json(&d, 1234, f); fclose(f);
+    f = fmemopen(parts, sizeof parts, "w"); nvm_json_open(&d, 1234, f); nvm_json_close(f); fclose(f);
+    arm("nvm_json is exactly open + close", !strcmp(whole, parts));
+    memset(parts, 0, sizeof parts);
+    f = fmemopen(parts, sizeof parts, "w"); nvm_json_open(&d, 1234, f); fputs(",\"health\":null,\"boost\":{\"held\":true}", f); nvm_json_close(f); fclose(f);
+    arm("keys appended before the closing brace keep one balanced line",
+        balanced(parts) && strstr(parts, "\"vram_used_mib\":null,\"health\":null,\"boost\":{\"held\":true}}\n") && !strchr(parts, '\n')[1]);
+    arm("the boost policy reads util_gpu_pct from the same copy", nvm_util_gpu(&d) == 3);
+    d.perfDevUtil.lastModifiedTimestamp = RUSD_TIMESTAMP_WRITE_IN_PROGRESS;
+    arm("and -1 where the line prints null", nvm_util_gpu(&d) == -1 && strstr(render(&d), "\"util_gpu_pct\":null") != 0);
+
     /* NVIDIA's reader, as nvmetrics-agent uses it */
     memset(&live, 0, sizeof live); memset(&copy, 0, sizeof copy);
     live.instPowerUsage.lastModifiedTimestamp = 500; live.instPowerUsage.info.instGpuPower = 9000;

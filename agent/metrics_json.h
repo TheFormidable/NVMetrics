@@ -39,8 +39,15 @@ static inline void nvm_watts(FILE *f, const char *name, int ok, NvU32 mw)
     else fprintf(f, "\"%s\":null,", name);
 }
 
-/* writes {"t":..,...}\n; `now_ms` is the sample time the caller stamps (wall clock, for the graph) */
-static inline void nvm_json(const NV00DE_SHARED_DATA *d, unsigned long long now_ms, FILE *f)
+/* the GPU utilisation the line prints as util_gpu_pct, or -1 where it prints null (the boost policy reads this) */
+static inline int nvm_util_gpu(const NV00DE_SHARED_DATA *d)
+{
+    return nvm_ok(d->perfDevUtil.lastModifiedTimestamp) ? (int)d->perfDevUtil.info.gpuPercentBusy : -1;
+}
+
+/* writes {"t":..,...,"vram_used_mib":.. without the closing brace, so the caller can append ,"key":value pairs and end
+   the line with nvm_json_close; `now_ms` is the sample time the caller stamps (wall clock, for the graph) */
+static inline void nvm_json_open(const NV00DE_SHARED_DATA *d, unsigned long long now_ms, FILE *f)
 {
     fprintf(f, "{\"t\":%llu,", now_ms);
 
@@ -98,8 +105,17 @@ static inline void nvm_json(const NV00DE_SHARED_DATA *d, unsigned long long now_
 
     const RUSD_PMA_MEMORY_INFO *pm = &d->pmaMemoryInfo;
     if (nvm_ok(pm->lastModifiedTimestamp) && pm->totalPmaMemory && pm->freePmaMemory <= pm->totalPmaMemory)
-        fprintf(f, "\"vram_total_mib\":%llu,\"vram_used_mib\":%llu}\n", (unsigned long long)(pm->totalPmaMemory >> 20),
+        fprintf(f, "\"vram_total_mib\":%llu,\"vram_used_mib\":%llu", (unsigned long long)(pm->totalPmaMemory >> 20),
                 (unsigned long long)((pm->totalPmaMemory - pm->freePmaMemory) >> 20));
-    else fprintf(f, "\"vram_total_mib\":null,\"vram_used_mib\":null}\n");
+    else fprintf(f, "\"vram_total_mib\":null,\"vram_used_mib\":null");
+}
+
+static inline void nvm_json_close(FILE *f) { fputs("}\n", f); }
+
+/* the whole line with no extra keys */
+static inline void nvm_json(const NV00DE_SHARED_DATA *d, unsigned long long now_ms, FILE *f)
+{
+    nvm_json_open(d, now_ms, f);
+    nvm_json_close(f);
 }
 #endif

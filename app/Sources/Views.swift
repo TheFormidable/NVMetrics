@@ -65,13 +65,14 @@ struct Card<Content: View>: View {
 
 struct InfoLine: View {
     let name: String, value: String
+    var tint: Color? = nil           // colour of the value; nil = normal text
     @Environment(\.colorScheme) private var scheme
     var body: some View {
         let th = Theme(scheme: scheme)
         HStack {
             Text(name).font(.system(size: 11, weight: .medium)).foregroundStyle(th.label)
             Spacer()
-            Text(value).font(.system(size: 13, weight: .semibold, design: .rounded)).monospacedDigit().foregroundStyle(th.text)
+            Text(value).font(.system(size: 13, weight: .semibold, design: .rounded)).monospacedDigit().foregroundStyle(tint ?? th.text)
         }
     }
 }
