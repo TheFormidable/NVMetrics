@@ -22,6 +22,7 @@ struct Sample: Decodable, Equatable {
     var throttle_mask: Int?
     var throttle: [String]?
     var fan_rpm: [Int]?
+    var fan_live: FanLive?          // v0.2: solo lectura
     var vram_total_mib: Int?
     var vram_used_mib: Int?
     var health: Health?            // null or missing: the driver has no health counters (before 3.0) or an older agent
@@ -88,4 +89,18 @@ enum Fmt {
         return String(format: "%.\(digits)f", v)
     }
     static func int(_ v: Int?) -> String { v.map { String($0) } ?? "--" }
+}
+
+// v0.2: C/RUSD provides observation, not a verified physical-fan enumeration.
+struct FanLive: Decodable, Equatable {
+    var mode: String?
+    var fan_count_authoritative: Bool?
+    var fan_count_observed: Int?
+    var count_source: String?
+    var spinning_count: Int?
+    var temperature_fresh: Bool?
+    var recommendation_pct: Int?
+    var emergency_advisory: Bool?
+    var applied: Bool?
+    var reason: String?
 }

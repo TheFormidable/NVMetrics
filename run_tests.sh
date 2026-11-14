@@ -11,6 +11,8 @@ INC="-I$H/agent -I$W/rusd620 -I$O/src/common/sdk/nvidia/inc"
 for t in test_metrics_json test_eco_policy test_boost_auto test_health test_protect; do
   cc -Wall -Wno-unused-function $INC "$H/agent/$t.c" -o "$T/$t" && "$T/$t" || fails=$((fails+1))
 done
+"$H/agent/test_fan_preview.sh" || fails=$((fails+1))
+"$H/agent/test_fan_runtime.sh" || fails=$((fails+1))
 "$H/agent/test_nvmetrics_setting.sh" || fails=$((fails+1))
 python3 -I "$H/agent/extract_rm_layer.py" "$D" "$T/rm" && echo "ok    the driver's RM layer rebuilds from its patches" || fails=$((fails+1))
 echo "$fails test file(s) failed"; [ $fails = 0 ]

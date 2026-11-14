@@ -47,6 +47,8 @@
 #include "boost_auto.h"
 #include "health.h"
 #include "protect.h"
+#include "fan_preview.h"
+#include "fan_runtime.h"
 
 static struct NvRmApi rm;
 static NvHandle hClient, hDevice, hSub;
@@ -260,11 +262,28 @@ static void health_read(struct nvm_health *h)
 #endif
 }
 
+/* NVMetrics fan exp v0.2: instrumentation */
+/* Existing RUSD stream -> independent, read-only advisory and fan observation.
+ * Note: rpmCurr is telemetry, NOT a firmware enumeration of coolers. */
+static struct nvm_fan_runtime fan_runtime;
+static void nvm_fan_append_live(const NV00DE_SHARED_DATA *snap)
+{
+    uint32_t rpms[RUSD_FAN_COOLER_MAX_COOLERS];
+    for (int i = 0; i < RUSD_FAN_COOLER_MAX_COOLERS; ++i)
+        rpms[i] = (uint32_t)snap->fanCoolerStatus.info.rpmCurr[i];
+    fputs(",\"fan_live\":", stdout);
+    nvm_fan_runtime_json(stdout, &fan_runtime, nvm_temp_gpu_c(snap),
+        (uint64_t)snap->temperatures[RUSD_TEMPERATURE_TYPE_GPU].lastModifiedTimestamp,
+        nvm_ok(snap->fanCoolerStatus.lastModifiedTimestamp),
+        rpms, RUSD_FAN_COOLER_MAX_COOLERS, mono_ms());
+}
+
 static void sample_line(const NV00DE_SHARED_DATA *snap, int control)
 {
     struct nvm_health h;
     health_read(&h);
     nvm_json_open(snap, now_ms(), stdout);
+    nvm_fan_append_live(snap);
     fputc(',', stdout); nvm_health_json(&h, stdout);
     if (control) { fputc(',', stdout); boost_json(stdout); fputc(',', stdout); nvm_protect_json(&bc.prot, stdout); }
     nvm_json_close(stdout);
@@ -287,10 +306,87 @@ static int boost_hold(void)
     return 0;
 }
 
+/* NVMetrics experimental fan v0.1 begin */
+/* Offline protocol metadata is NOT an active command binding. */
+static int nvm_fan_cli(int argc, char **argv)
+{
+    if (argc < 3) {
+        fprintf(stderr, "usage: nvmetrics-agent fan caps|status|preview [temps...]|set|restore|curve\n");
+        return 2;
+    }
+    const char *sub = argv[2];
+    if (!strcmp(sub, "set") || !strcmp(sub, "restore") || !strcmp(sub, "curve") ||
+        !strcmp(sub, "manual") || !strcmp(sub, "auto")) {
+        /* Never send a private RM cmd to the GPU. A refusal is preferable to fake success. */
+        nvm_fan_disabled_json(stdout, sub);
+        return 4;
+    }
+    if (!strcmp(sub, "preview")) {
+        if (argc < 4) { fprintf(stderr, "fan preview: supply one or more synthetic temperatures in C\n"); return 2; }
+        struct nvm_fan_curve curve = nvm_fan_default_curve();
+        struct nvm_fan_preview st = {0};
+        for (int i=3; i < argc; ++i) {
+            char *end = NULL;
+            errno = 0;
+            double c = strtod(argv[i], &end);
+            if (errno || !end || end == argv[i] || *end || !isfinite(c)) {
+                fprintf(stderr, "fan preview: invalid temperature '%s'\n", argv[i]); return 2;
+            }
+            struct nvm_fan_recommendation r = nvm_fan_preview_step(&st, &curve, c, 0, 1000);
+            if (!r.valid) {
+                fprintf(stdout, "{\"temperature_c\":%.1f,\"recommendation_pct\":null,\"applied\":false,\"error\":\"%s\"}\n",c,r.reason);
+            } else {
+                fprintf(stdout, "{\"temperature_c\":%.1f,\"recommendation_pct\":%d,\"emergency_preview\":%s,\"applied\":false,\"source\":\"offline_synthetic_temperature\"}\n",
+                        c, r.percent, r.emergency ? "true" : "false");
+            }
+        }
+        return 0;
+    }
+    if (strcmp(sub, "caps") && strcmp(sub, "status") && strcmp(sub, "diag")) {
+        fprintf(stderr, "fan: unknown subcommand '%s'\n", sub);
+        return 2;
+    }
+    if (argc != 3) { fprintf(stderr, "fan %s takes no extra args\n", sub); return 2; }
+    if (rm_up(0)) return 2;
+    NV00DE_SHARED_DATA *live = rusd_map();
+    if (!live) return 3;
+    usleep(1200 * 1000);
+    static NV00DE_SHARED_DATA snap;
+    rusd_snapshot(live, &snap);
+    int thermal = isfinite(nvm_temp_gpu_c(&snap));
+    int have_rpm = nvm_ok(snap.fanCoolerStatus.lastModifiedTimestamp);
+    int active = 0;
+    if (have_rpm)
+        for (int i=0; i < (int)RUSD_FAN_COOLER_MAX_COOLERS; ++i)
+            if (snap.fanCoolerStatus.info.rpmCurr[i]) ++active;
+    if (!strcmp(sub, "diag")) {
+        int last_seen = -1;
+        if (have_rpm)
+            for (int i=0; i < (int)RUSD_FAN_COOLER_MAX_COOLERS; ++i)
+                if (snap.fanCoolerStatus.info.rpmCurr[i]) last_seen = i;
+        nvm_fan_rm_diagnostic_json(stdout, 1, thermal, have_rpm, last_seen);
+        fputc('\n', stdout);
+        return 0;
+    }
+    if (!strcmp(sub, "status")) {
+        nvm_json_open(&snap, now_ms(), stdout);
+        nvm_fan_append_live(&snap);
+        fputs(",\"fan_backend\":", stdout);
+        nvm_fan_capabilities_json(stdout, 1, thermal, have_rpm, active);
+        nvm_json_close(stdout);
+    } else {
+        nvm_fan_capabilities_json(stdout, 1, thermal, have_rpm, active);
+        fputc('\n', stdout);
+    }
+    return 0;
+}
+/* NVMetrics experimental fan v0.1 end */
+
 int main(int argc, char **argv)
 {
     const char *cmd = argc > 1 ? argv[1] : "once";
     signal(SIGPIPE, SIG_DFL);   /* the app closing our stdout ends the watch */
+    if (!strcmp(cmd, "fan")) return nvm_fan_cli(argc, argv);
     if (!strcmp(cmd, "eco")) {
         enum eco_cmd c = eco_parse(argc > 2 ? argv[2] : NULL);
         if (c == ECO_BAD) { fprintf(stderr, "usage: nvmetrics-agent eco [status|on|off]\n"); return 2; }

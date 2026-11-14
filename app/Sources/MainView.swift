@@ -40,20 +40,10 @@ struct MainView: View {
                             .foregroundStyle(s?.isThrottlingHard == true ? Theme.hot : th.text)
                     }
                 }
-                Card(icon: "fanblades.fill", title: "Ventilador") {
-                    let fans = s?.fan_rpm ?? []
-                    ForEach(Array(fans.enumerated()), id: \.offset) { item in
-                        InfoLine(name: fans.count > 1 ? "Ventilador \(item.offset + 1)" : "Velocidad",
-                                 value: item.element == 0 ? "parado" : "\(item.element) RPM")
-                    }
-                    if s?.fan_rpm == nil { InfoLine(name: "Velocidad", value: "--") }
-                    else if fans.isEmpty { InfoLine(name: "Velocidad", value: "parados") }
-                    InfoLine(name: "VRAM", value: vram(s))
-                    Text("Los ventiladores los controla el firmware de la tarjeta con la curva de su BIOS; NVIDIA no publica las órdenes para cambiarlos. Muchas tarjetas los paran por debajo de unos 50-60 °C.")
-                        .font(.system(size: 10)).foregroundStyle(th.label).fixedSize(horizontal: false, vertical: true)
-                }
+                FanCard()
             }
-            .frame(height: 250)
+            .frame(height: 300)
+            FanCurveCard().fixedSize(horizontal: false, vertical: true)
             modes(th)
             HStack(alignment: .top, spacing: 12) {
                 BoostCard().frame(maxWidth: .infinity)

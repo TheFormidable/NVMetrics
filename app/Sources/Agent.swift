@@ -30,6 +30,10 @@ enum BoostMode: String, CaseIterable {
 @MainActor
 final class Agent: ObservableObject {
     @Published private(set) var latest: Sample?
+    // Maximum non-zero RPM index observed, possibly in an earlier launch.
+    // Not the board's authoritative physical fan count.
+    @Published private(set) var previouslyObservedFanCount: Int =
+        min(8, max(0, UserDefaults.standard.integer(forKey: "nvmetrics.fan.observedSlots")))
     @Published private(set) var history: [Sample] = []        // last 5 minutes, for the graph
     @Published private(set) var problem: String?               // shown when there are no readings
     /// what Alerts judges: the recent readings while there is a current one, nothing once the agent ended (ended()
@@ -149,6 +153,13 @@ final class Agent: ObservableObject {
             let line = buffer.subdata(in: buffer.startIndex..<nl)
             buffer.removeSubrange(buffer.startIndex...nl)
             guard let s = try? decoder.decode(Sample.self, from: line) else { continue }
+            // Remember observed coolers even when RUSD later reports [] (all stopped).
+            let observed = s.fan_live?.fan_count_observed ??
+                s.fan_rpm?.lastIndex(where: { $0 > 0 }).map { $0 + 1 }
+            if let observed, observed > previouslyObservedFanCount && observed <= 8 {
+                previouslyObservedFanCount = observed
+                UserDefaults.standard.set(observed, forKey: "nvmetrics.fan.observedSlots")
+            }
             latest = s
             problem = nil
             retryDelay = 2
