@@ -26,6 +26,7 @@ struct Sample: Decodable, Equatable {
     var vram_used_mib: Int?
     var health: Health?            // null or missing: the driver has no health counters (before 3.0) or an older agent
     var boost: BoostState?         // only with "watch --control"
+    var protect: ProtectState?     // only with "watch --control" (the app always runs it that way)
 
     var date: Date { Date(timeIntervalSince1970: t / 1000) }
 
@@ -72,6 +73,13 @@ struct BoostState: Decodable, Equatable {
     var mode: String?              // "off" | "auto" | "max"
     var held: Bool?
     var error: String?             // "0x<RM status>" when the driver refused the last request
+}
+
+/// The agent's heat protection (watch --control, agent/protect.h): while active it does not hold the boost request.
+/// why: "hot" (core), "mem_hot" (video memory) or "fans_stopped" (fans stopped on a warm core); null while inactive.
+struct ProtectState: Decodable, Equatable {
+    var active: Bool?
+    var why: String?
 }
 
 enum Fmt {

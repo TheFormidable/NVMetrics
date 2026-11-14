@@ -22,16 +22,19 @@ struct BoostCard: View {
                 Text("Solo cambia algo con el modo reposo activado: sin él, el propio driver ya tiene la tarjeta a tope.")
                     .font(.system(size: 10)).foregroundStyle(th.text).fixedSize(horizontal: false, vertical: true)
             }
-            Text("Se aplica al momento, sin contraseña, y sigue aunque cierres esta ventana: deja de pedirse al salir de NVMetrics (menú de la barra > Salir).")
+            Text("Se aplica al momento, sin contraseña, y sigue aunque cierres esta ventana: deja de pedirse al salir de NVMetrics (menú de la barra > Salir) y mientras la protección por calor esté activa.")
                 .font(.system(size: 10)).foregroundStyle(th.label).fixedSize(horizontal: false, vertical: true)
         }
     }
 
-    /// from the latest sample's "boost" (nil: no reading yet)
+    /// from the latest sample's "boost" and "protect" (nil: no reading yet); a driver error wins over protection, and in
+    /// Ahorro protection is not shown (nothing is asked for there, so it pauses nothing)
     @ViewBuilder private func status(_ th: Theme) -> some View {
         let b = agent.latest?.boost
         if let e = b?.error {
             Text("El driver rechazó la petición (\(e))").font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.hot)
+        } else if agent.latest?.protect?.active == true && b?.mode != "off" {
+            Text("Ahora: en pausa por protección").font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.warn)
         } else if let held = b?.held {
             Text(held ? "Ahora: a tope" : "Ahora: la tarjeta decide (reposo si no hay carga)")
                 .font(.system(size: 12, weight: .semibold)).foregroundStyle(held ? Theme.green : th.text)

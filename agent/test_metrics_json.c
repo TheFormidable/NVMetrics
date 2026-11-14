@@ -90,6 +90,22 @@ int main(void)
     d.perfDevUtil.lastModifiedTimestamp = RUSD_TIMESTAMP_WRITE_IN_PROGRESS;
     arm("and -1 where the line prints null", nvm_util_gpu(&d) == -1 && strstr(render(&d), "\"util_gpu_pct\":null") != 0);
 
+    /* the protection's inputs, from the same copy the line prints */
+    arm("the protection reads temp_gpu_c from the same copy (63.5)", nvm_temp_gpu_c(&d) == 63.5 && strstr(render(&d), "\"temp_gpu_c\":63.5,") != 0);
+    arm("and NAN where the line prints null (a sensor reading 0)", isnan(nvm_temp_mem_c(&d)) && strstr(render(&d), "\"temp_mem_c\":null,") != 0);
+    d.temperatures[RUSD_TEMPERATURE_TYPE_MEMORY].temperature = 96 * 256;
+    arm("a memory temperature reads as degrees", nvm_temp_mem_c(&d) == 96.0 && strstr(render(&d), "\"temp_mem_c\":96.0,") != 0);
+    d.temperatures[RUSD_TEMPERATURE_TYPE_GPU].lastModifiedTimestamp = RUSD_TIMESTAMP_WRITE_IN_PROGRESS;
+    arm("a temperature being written is NAN and null", isnan(nvm_temp_gpu_c(&d)) && strstr(render(&d), "\"temp_gpu_c\":null,") != 0);
+    arm("fans: one turning is 1 (fan_rpm [0,1450])", nvm_fans(&d) == 1 && strstr(render(&d), "\"fan_rpm\":[0,1450],") != 0);
+    d.fanCoolerStatus.info.rpmCurr[1] = 0;
+    arm("fans: every one at 0 is 0 and prints []", nvm_fans(&d) == 0 && strstr(render(&d), "\"fan_rpm\":[],") != 0);
+    d.fanCoolerStatus.info.rpmCurr[RUSD_FAN_COOLER_MAX_COOLERS - 1] = 900;
+    arm("fans: the last cooler turning alone is 1, zeros kept before it", nvm_fans(&d) == 1 && strstr(render(&d), ",900],") != 0 &&
+        strstr(render(&d), "\"fan_rpm\":[0,") != 0);
+    d.fanCoolerStatus.lastModifiedTimestamp = 0;
+    arm("fans: no valid reading is -1 and prints null", nvm_fans(&d) == -1 && strstr(render(&d), "\"fan_rpm\":null,") != 0);
+
     /* NVIDIA's reader, as nvmetrics-agent uses it */
     memset(&live, 0, sizeof live); memset(&copy, 0, sizeof copy);
     live.instPowerUsage.lastModifiedTimestamp = 500; live.instPowerUsage.info.instGpuPower = 9000;

@@ -1,7 +1,8 @@
 // Runs nvmetrics-agent (bundled in Contents/Resources) and turns its JSON lines into Samples. Reading needs no rights.
 // If the agent stops (driver not loaded, sleep), it is started again after a pause that grows to 30 s.
 // The agent runs as "watch <ms> --control": the app writes "boost off|auto|max" lines to its stdin. The boost request
-// needs no password and lasts only while the agent runs (it lets go when NVMetrics quits or stops it).
+// needs no password and lasts only while the agent runs (it lets go when NVMetrics quits or stops it). In this mode the
+// agent also runs its heat protection, which drops the boost request while the card is too hot ("protect" in each line).
 import Foundation
 import Combine
 
@@ -31,6 +32,9 @@ final class Agent: ObservableObject {
     @Published private(set) var latest: Sample?
     @Published private(set) var history: [Sample] = []        // last 5 minutes, for the graph
     @Published private(set) var problem: String?               // shown when there are no readings
+    /// what Alerts judges: the recent readings while there is a current one, nothing once the agent ended (ended()
+    /// drops latest but keeps the graph's history), so no warning outlives the agent
+    var alertReadings: [Sample] { latest == nil ? [] : history }
     @Published var intervalMs: Int = 1000 { didSet { restart() } }
     @Published var boostMode: BoostMode = Agent.savedBoostMode() {
         didSet {
@@ -127,6 +131,8 @@ final class Agent: ObservableObject {
         guard let p = process, ObjectIdentifier(p) == id else { return }
         process = nil
         closeInput()
+        latest = nil          // no agent, no current reading: no stale alerts or "⚠︎", and the driver notice can show
+        buffer.removeAll()    // a half line from the dead agent must not prefix the next agent's first line
         guard !stopping else { return }
         let delay = retryDelay
         retryDelay = min(retryDelay * 2, 30)

@@ -6,7 +6,12 @@
  *                                    Every line has "health" (the 3.0 driver's counters, health.h; null on 2.9).
  *                                    --control: also reads "boost off|auto|max" lines on stdin, holds the GPU's boost
  *                                    request accordingly (boost_auto.h; starts off) and adds "boost":{mode,held,error}
- *                                    to each line; stdin closing, SIGTERM or SIGINT clear the request and end it
+ *                                    to each line; stdin closing, SIGTERM or SIGINT clear the request and end it.
+ *                                    It also runs the heat protection (protect.h): once the core is at 83 C or more, the
+ *                                    memory at 95 C or more, or every fan stopped with the core at 70 C or more, for 3 s,
+ *                                    the boost is not held until the card has been cool for 30 s (the boost policy keeps
+ *                                    running and resumes then); each line also gets
+ *                                    "protect":{"active":true|false,"why":"hot"|"mem_hot"|"fans_stopped"|null}
  *   nvmetrics-agent once             one JSON line
  *   nvmetrics-agent eco [status]     {"eco":"on"|"off"|"other"|null}
  *   nvmetrics-agent eco on|off       root only: keep the GPU at its rated power (no turbo), or give that back to the
@@ -15,7 +20,8 @@
  *
  * Reading and the boost request need no special rights (PERF_BOOST is a non-privileged control; the request lives only
  * as long as this process's RM client). Nothing here can set fan speed, power limit, clock offsets or voltage: the open
- * resource manager has no controls for them, so the app never offers them.
+ * resource manager has no controls for them, so the app never offers them. The fans are run by the card's firmware (its
+ * VBIOS curve); the agent only reads their RPM. Protection never turns eco on: that needs root and the app's own prompt.
  * build: build.sh <patched Mesa tree> <out>
  */
 #include <stddef.h>
@@ -40,6 +46,7 @@
 #include "eco_policy.h"
 #include "boost_auto.h"
 #include "health.h"
+#include "protect.h"
 
 static struct NvRmApi rm;
 static NvHandle hClient, hDevice, hSub;
@@ -158,6 +165,7 @@ static struct {
     char error[16];                 /* "0x.." of the last failed send, "" after a success */
     unsigned long long last_try;    /* mono ms of the last failed hold, to retry it at most every 10 s */
     unsigned long long last_step;
+    struct nvm_protect_state prot;  /* heat protection: while active the boost is not held */
 } bc;
 
 static void boost_apply(int want, unsigned long long now)
@@ -258,7 +266,7 @@ static void sample_line(const NV00DE_SHARED_DATA *snap, int control)
     health_read(&h);
     nvm_json_open(snap, now_ms(), stdout);
     fputc(',', stdout); nvm_health_json(&h, stdout);
-    if (control) { fputc(',', stdout); boost_json(stdout); }
+    if (control) { fputc(',', stdout); boost_json(stdout); fputc(',', stdout); nvm_protect_json(&bc.prot, stdout); }
     nvm_json_close(stdout);
 }
 
@@ -324,8 +332,11 @@ int main(int argc, char **argv)
         unsigned long long start = mono_ms();
         rusd_snapshot(live, &snap);
         if (control) {
-            /* the decision uses the utilisation of the copy this line prints */
-            int want = nvm_boost_step(bc.mode, &bc.st, nvm_util_gpu(&snap), (long)(start - bc.last_step));
+            /* both decisions use the readings of the copy this line prints; the boost policy keeps its own state while
+               protection overrides it, so it resumes where the load is when protection ends */
+            long dt = (long)(start - bc.last_step);
+            int want = nvm_boost_step(bc.mode, &bc.st, nvm_util_gpu(&snap), dt);
+            if (nvm_protect_step(&bc.prot, nvm_temp_gpu_c(&snap), nvm_temp_mem_c(&snap), nvm_fans(&snap), dt)) want = 0;
             bc.last_step = start;
             boost_apply(want, start);
         }

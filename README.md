@@ -1,8 +1,8 @@
 # NVMetrics
 
 Monitor de la gráfica para el driver [NullMoth](https://github.com/TheFormidable/nvidia-macos-driver) en macOS: un icono en la barra de menús con la temperatura y una ventana con
-relojes, consumo, temperaturas, ventilador, VRAM, los controles que el driver de verdad permite y, con el driver 3.0, su salud. Sigue el
-modo claro u oscuro de macOS.
+relojes, consumo, temperaturas, ventilador, VRAM, los controles que el driver de verdad permite, avisos cuando la tarjeta se
+calienta y, con el driver 3.0, su salud. Sigue el modo claro u oscuro de macOS.
 
 ## Qué lee
 
@@ -31,7 +31,57 @@ Estos dos piden la contraseña de administrador.
   solo mientras NVMetrics está en marcha (cerrar la ventana no basta: sigue en la barra de menús); al salir con Salir del
   menú (también si se cierra de golpe o lo fuerzas a salir) el driver la retira solo. Solo cambia algo con el
   modo reposo activado; sin él, el propio driver ya tiene la tarjeta a tope casi siempre. La tarjeta sigue respetando
-  sus límites de temperatura y potencia.
+  sus límites de temperatura y potencia. Mientras la protección por calor está activa, NVMetrics no pide relojes
+  máximos en ningún modo (ver *Protección*).
+
+## Avisos
+
+Si hay algo que mirar, la ventana lo muestra arriba, bajo el título, y el menú de la barra lo pone como primera línea (el más
+grave); para un peligro o un aviso, la barra de menús muestra además `⚠︎` delante de la temperatura:
+
+- **Peligro**: el núcleo a 88 °C o más (cierra el juego o la carga y revisa la refrigeración).
+- **Peligro**: los ventiladores parados con el núcleo a 70 °C o más (comprueba que nada los bloquee).
+- **Aviso**: el núcleo a 80 °C o más, o la memoria de vídeo a 95 °C o más.
+- **Información**: la protección está activa (salvo en *Ahorro*, donde no cambia nada; ver abajo).
+
+Los umbrales se comparan con la temperatura en grados enteros, la que muestra la app. Un aviso de temperatura, una vez
+puesto, sigue hasta que la lectura baja más de 2 °C por debajo de su umbral (el de 80 °C se quita por debajo de 78 °C),
+para que no parpadee si la lectura ronda el límite.
+
+Son solo avisos: no cambian nada en la tarjeta. Sin avisos, la ventana no muestra ese bloque.
+
+## Protección
+
+Mientras NVMetrics está en marcha, el agente vigila cada lectura. Si durante 3 s seguidos el núcleo está a 83 °C o más,
+la memoria de vídeo a 95 °C o más, o los ventiladores parados con el núcleo a 70 °C o más, activa la protección:
+**NVMetrics deja de pedir relojes máximos** (el *Rendimiento de la GPU* elegido se queda como está y vuelve a aplicarse
+solo cuando termina). La quita cuando lleva 30 s seguidos con el núcleo por debajo de 75 °C, la memoria por debajo de
+88 °C (o sin lectura) y, si los ventiladores están parados, el núcleo por debajo de 65 °C. Si falta la lectura de la
+temperatura del núcleo, no cambia de estado. Mientras está activa, salvo en *Ahorro*, el panel de rendimiento dice
+"Ahora: en pausa por protección".
+
+Qué no hace: no mueve los ventiladores (no se puede, ver *Ventiladores*), no activa el modo eco (pide la contraseña y lo
+decides tú; es lo otro que baja el calor con carga), no baja el límite de potencia ni apaga nada. La tarjeta sigue
+aplicando por su cuenta sus propios límites de temperatura.
+
+Cuándo sirve: solo con el **modo reposo activado**. Sin él, el propio driver sigue pidiendo relojes máximos y que
+NVMetrics deje de pedirlos no baja nada. En *Ahorro* tampoco cambia nada, porque NVMetrics ya no los pide. Y solo
+funciona mientras NVMetrics está abierto (basta con que siga en la barra de menús); al salir de la app no queda nada
+vigilando.
+
+## Ventiladores
+
+Los ventiladores los controla el firmware de la tarjeta con la curva de su BIOS. Muchas tarjetas los paran del todo por
+debajo de unos 50-60 °C, así que verlos a 0 RPM con la tarjeta tranquila es normal. NVMetrics muestra sus RPM pero no
+puede cambiarlos: NVIDIA no publica las órdenes para hacerlo. En su gestor de recursos abierto (open-gpu-kernel-modules)
+la cabecera de esas órdenes, `ctrl2080fan.h`, está vacía, y el bloque de métricas solo trae la velocidad actual, para
+leer. En Linux, la velocidad se cambia con el software cerrado de NVIDIA (su biblioteca NVML, por ejemplo), no con órdenes
+publicadas.
+
+Para que esto cambie, NVIDIA tendría que publicar en open-gpu-kernel-modules las definiciones de esas órdenes: leer y
+fijar la velocidad, la política de control y la vuelta a la curva automática (las que hay detrás de las funciones de
+ventilador de NVML). Se le puede pedir en ese repositorio, en Discussions, categoría Ideas (no acepta peticiones como
+issues). Si las publica, NVMetrics podría ofrecer control de ventiladores; hasta entonces no lo ofrece.
 
 ## Salud del driver
 
@@ -44,9 +94,10 @@ driver 3.0.".
 
 ## Qué no puede hacer
 
-Velocidad o curva de ventiladores, límite de potencia en %, límite de temperatura, mover los relojes por encima o por debajo de los de fábrica (offsets) y voltaje. El
-gestor de recursos abierto de NVIDIA (open-gpu-kernel-modules 620.70.06) no tiene esas órdenes: NVIDIA las guarda en su
-parte cerrada, y los ventiladores los lleva el firmware de la tarjeta. La app no muestra controles que no funcionarían.
+Velocidad o curva de ventiladores (ver *Ventiladores*), límite de potencia en %, límite de temperatura, mover los relojes
+por encima o por debajo de los de fábrica (offsets) y voltaje. El gestor de recursos abierto de NVIDIA
+(open-gpu-kernel-modules 620.70.06) no tiene esas órdenes: NVIDIA las guarda en su parte cerrada, y los ventiladores los
+lleva el firmware de la tarjeta. La app no muestra controles que no funcionarían.
 
 ## El agente desde Terminal
 
@@ -56,7 +107,9 @@ parte cerrada, y los ventiladores los lleva el firmware de la tarjeta. La app no
 
 Cada línea lleva `"health"` (`null` antes del driver 3.0). Con `--control`, que es como lo lanza la app, el agente lee
 órdenes de su entrada estándar, una por línea: `boost off`, `boost auto` o `boost max`, y cada línea lleva también
-`"boost":{"mode":...,"held":true|false,"error":null|"0x..."}`. Al cerrarse su entrada estándar (la app se fue) o al
+`"boost":{"mode":...,"held":true|false,"error":null|"0x..."}` y
+`"protect":{"active":true|false,"why":"hot"|"mem_hot"|"fans_stopped"|null}` (la protección: núcleo caliente, memoria
+caliente o ventiladores parados; `null` mientras no está activa). Al cerrarse su entrada estándar (la app se fue) o al
 recibir SIGTERM retira la petición y termina.
 
 ## Estructura

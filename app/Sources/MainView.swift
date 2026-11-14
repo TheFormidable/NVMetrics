@@ -9,8 +9,10 @@ struct MainView: View {
     var body: some View {
         let th = Theme(scheme: scheme)
         let s = agent.latest
+        let alerts = Alerts.list(agent.alertReadings, reposo: controls.reposo)
         VStack(spacing: 16) {
             header(th)
+            if !alerts.isEmpty { alertBlock(alerts, th) }
             if let problem = agent.problem, s == nil {
                 Text(problem).font(.system(size: 13)).foregroundStyle(Theme.warn)
                     .frame(maxWidth: .infinity).padding(10)
@@ -47,7 +49,7 @@ struct MainView: View {
                     if s?.fan_rpm == nil { InfoLine(name: "Velocidad", value: "--") }
                     else if fans.isEmpty { InfoLine(name: "Velocidad", value: "parados") }
                     InfoLine(name: "VRAM", value: vram(s))
-                    Text("Los ventiladores los gobierna la propia tarjeta con su curva interna; el driver no puede cambiarlos. Muchas paran por debajo de unos 60 °C.")
+                    Text("Los ventiladores los controla el firmware de la tarjeta con la curva de su BIOS; NVIDIA no publica las órdenes para cambiarlos. Muchas tarjetas los paran por debajo de unos 50-60 °C.")
                         .font(.system(size: 10)).foregroundStyle(th.label).fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -83,6 +85,46 @@ struct MainView: View {
             }
             .pickerStyle(.segmented).frame(width: 150)
             .help("Cada cuánto se lee la tarjeta")
+        }
+    }
+
+    /// the alerts of Alerts.swift, most severe first; only called when there is at least one, so without alerts the
+    /// window keeps its height
+    private func alertBlock(_ alerts: [GPUAlert], _ th: Theme) -> some View {
+        let top = alerts[0].level
+        return VStack(alignment: .leading, spacing: 6) {
+            ForEach(alerts, id: \.text) { a in
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: MainView.alertSymbol(a.level)).font(.system(size: 13, weight: .semibold)).frame(width: 18)
+                    Text(a.text).font(.system(size: 12, weight: a.level == .info ? .medium : .semibold))
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 0)
+                }
+                .foregroundStyle(MainView.alertColor(a.level, th))
+            }
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(th.panel)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8)
+            .stroke(top == .info ? th.panelEdge : MainView.alertColor(top, th).opacity(0.7), lineWidth: 1))
+    }
+
+    /// danger red, warning amber, info in the normal text colour
+    private static func alertColor(_ level: GPUAlert.Level, _ th: Theme) -> Color {
+        switch level {
+        case .danger: return Theme.hot
+        case .warning: return Theme.warn
+        case .info: return th.text
+        }
+    }
+
+    private static func alertSymbol(_ level: GPUAlert.Level) -> String {
+        switch level {
+        case .danger: return "exclamationmark.triangle.fill"
+        case .warning: return "thermometer.high"
+        case .info: return "shield.lefthalf.filled"
         }
     }
 
@@ -145,10 +187,12 @@ struct MainView: View {
 
 struct MenuContent: View {
     @EnvironmentObject var agent: Agent
+    @EnvironmentObject var controls: Controls
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         let s = agent.latest
+        if let first = Alerts.list(agent.alertReadings, reposo: controls.reposo).first { Text(first.menuText) }
         Text("Temperatura: \(Fmt.num(s?.temp_gpu_c, 0)) °C")
         Text("Consumo: \(Fmt.num(s?.power_w, 0)) W · \(s?.pstate.map { "P\($0)" } ?? "--")")
         Text("Reloj: \(Fmt.int(s?.clock_gpu_mhz)) MHz · Uso: \(Fmt.int(s?.util_gpu_pct)) %")

@@ -5,6 +5,7 @@
  * the app shows "--" for null, so a zero on screen is always a reading. */
 #ifndef NVMETRICS_JSON_H
 #define NVMETRICS_JSON_H
+#include <math.h>
 #include <stdio.h>
 #include <string.h>
 /* NVIDIA's header lets a user-space reader bring its own fence and copy (its default pulls in nvintrin.h, which the
@@ -26,10 +27,17 @@ static const char *const nvm_throttle_names[] = {
     "hw_thermal", "power_brake", "display_clock", "board_limit", "reliability",
 };
 
+/* a temperature in degrees C, or NAN where the line prints null. NvTemp is signed 24.8 fixed point; 0 from a sensor the
+   board does not have reads as "not there". */
+static inline double nvm_temp_c(const RUSD_TEMPERATURE *t)
+{
+    return nvm_ok(t->lastModifiedTimestamp) && t->temperature != 0 ? (double)t->temperature / 256.0 : NAN;
+}
+
 static inline void nvm_temp(FILE *f, const char *name, const RUSD_TEMPERATURE *t)
 {
-    /* NvTemp is signed 24.8 fixed point; 0 from a sensor the board does not have reads as "not there" */
-    if (nvm_ok(t->lastModifiedTimestamp) && t->temperature != 0) fprintf(f, "\"%s\":%.1f,", name, (double)t->temperature / 256.0);
+    double c = nvm_temp_c(t);
+    if (!isnan(c)) fprintf(f, "\"%s\":%.1f,", name, c);
     else fprintf(f, "\"%s\":null,", name);
 }
 
@@ -43,6 +51,27 @@ static inline void nvm_watts(FILE *f, const char *name, int ok, NvU32 mw)
 static inline int nvm_util_gpu(const NV00DE_SHARED_DATA *d)
 {
     return nvm_ok(d->perfDevUtil.lastModifiedTimestamp) ? (int)d->perfDevUtil.info.gpuPercentBusy : -1;
+}
+
+/* temp_gpu_c / temp_mem_c as the line prints them, NAN where it prints null (the protection reads these) */
+static inline double nvm_temp_gpu_c(const NV00DE_SHARED_DATA *d) { return nvm_temp_c(&d->temperatures[RUSD_TEMPERATURE_TYPE_GPU]); }
+static inline double nvm_temp_mem_c(const NV00DE_SHARED_DATA *d) { return nvm_temp_c(&d->temperatures[RUSD_TEMPERATURE_TYPE_MEMORY]); }
+
+/* the last cooler that reads non-zero, -1 when none does: fan_rpm lists the coolers up to this one. A cooler that reads
+   0 is a stopped fan when an earlier one turns, and is left out after the last one that turns. */
+static inline int nvm_fan_last(const NV00DE_SHARED_DATA *d)
+{
+    int last = -1;
+    for (int i = 0; i < (int)RUSD_FAN_COOLER_MAX_COOLERS; i++) if (d->fanCoolerStatus.info.rpmCurr[i]) last = i;
+    return last;
+}
+
+/* the fans as fan_rpm shows them: -1 null (no valid reading), 0 [] (every fan stopped), 1 at least one turns
+   (protect.h's NVM_FANS_UNKNOWN / _STOPPED / _TURNING) */
+static inline int nvm_fans(const NV00DE_SHARED_DATA *d)
+{
+    if (!nvm_ok(d->fanCoolerStatus.lastModifiedTimestamp)) return -1;
+    return nvm_fan_last(d) >= 0 ? 1 : 0;
 }
 
 /* writes {"t":..,...,"vram_used_mib":.. without the closing brace, so the caller can append ,"key":value pairs and end
@@ -93,11 +122,10 @@ static inline void nvm_json_open(const NV00DE_SHARED_DATA *d, unsigned long long
         fprintf(f, "],");
     } else fprintf(f, "\"throttle_mask\":null,\"throttle\":null,");
 
-    /* fans: RPM only (the shared block carries no percentage); a cooler that reads 0 is a stopped fan when an earlier
-       one turns, and is left out after the last cooler that ever reported */
+    /* fans: RPM only (the shared block carries no percentage), up to the last one that turns (nvm_fan_last); every fan
+       stopped is [] */
     if (nvm_ok(d->fanCoolerStatus.lastModifiedTimestamp)) {
-        int last = -1;
-        for (int i = 0; i < (int)RUSD_FAN_COOLER_MAX_COOLERS; i++) if (d->fanCoolerStatus.info.rpmCurr[i]) last = i;
+        int last = nvm_fan_last(d);
         fprintf(f, "\"fan_rpm\":[");
         for (int i = 0; i <= last; i++) fprintf(f, "%s%u", i ? "," : "", (unsigned)d->fanCoolerStatus.info.rpmCurr[i]);
         fprintf(f, "],");
