@@ -1,9 +1,10 @@
 // The two switches NVMetrics offers, both through an administrator prompt (macOS asks for the password):
 //  - reposo: NVRM_610_BOOST=0 in the user's block of nvrm610.conf (nvmetrics-setting.sh), which every app reads when
 //            it starts and which lasts across reboots, and in the same prompt the driver's boost policy
-//            (nvmetrics-agent policy idle|normal, driver 3.0.1 on), which every running app follows within a second;
-//            with an older driver only the file is written and it applies as apps restart. A tool that writes only
-//            the file after a policy was chosen in this boot changes nothing until a reboot (reposoMismatch says so)
+//            (nvmetrics-agent policy idle|normal, driver 3.0.1 on), which every running app follows the next time it
+//            works (within a second of its work; one that sits idle with NVRM_610_BOOST=hold keeps its hold until
+//            then); with an older driver only the file is written and it applies as apps restart. A tool that writes
+//            only the file after a policy was chosen in this boot changes nothing until a reboot (reposoMismatch)
 //  - eco:    the GPU's rated-power limit, GLOBAL client (nvmetrics-agent eco on|off); applies at once
 // Reading the state needs no password. Fan speed, power limit, clock offsets and voltage are not offered: the driver
 // has no controls for them.
@@ -73,8 +74,17 @@ final class Controls: ObservableObject {
         // an older driver has no policy, and then the file alone still applies as apps restart
         admin([setting, "reposo", on ? "on" : "off"],
               followedBy: [Agent.agentPath, "policy", on ? "idle" : "normal"]) { out in
+            let conf = Controls.fieldAny(out, "reposo")
             let policy = Controls.fieldAny(out, "policy")
-            self.reposo = Controls.reposoState(conf: Controls.fieldAny(out, "reposo"), policy: policy)
+            if policy == nil, let why = Controls.fieldAny(out, "why"), why == "refused" || why == "failed" {
+                // a driver that has the policy kept the one it had: the file changed alone, so read both again and
+                // show what the driver follows (the notice says so when they now disagree)
+                self.message = "El archivo de ajustes quedó guardado, pero el driver no aceptó el cambio de política."
+                self.refresh()
+                return
+            }
+            self.reposo = Controls.reposoState(conf: conf, policy: policy)
+            self.mismatchNote = Controls.reposoMismatch(conf: conf, policy: policy)
             let hot = policy == (on ? "idle" : "normal")
             self.reposoHot = hot
             guard self.reposo == on else {
@@ -140,7 +150,8 @@ final class Controls: ObservableObject {
             await MainActor.run {
                 self.busy = false
                 if status == 0 { done(out) }
-                else if err.contains("-128") { self.message = nil }   // the user cancelled the password prompt
+                // the user cancelled the password prompt: nothing changed, so only a mismatch notice stays up
+                else if err.contains("-128") { self.message = self.mismatchNote }
                 else { self.message = "No se pudo aplicar: \(err.trimmingCharacters(in: .whitespacesAndNewlines))" }
             }
         }

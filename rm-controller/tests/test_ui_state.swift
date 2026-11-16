@@ -200,16 +200,34 @@ final class PolicyAnswer: @unchecked Sendable {
             // The file says off while the policy chosen earlier in this boot says idle: the switch shows what the
             // driver does and a notice says the two disagree. The notice comes down when they agree again.
             let answer = PolicyAnswer()
-            let controls = Controls(execute: { _, args in
+            let controls = Controls(execute: { path, args in
+                if path == "/usr/bin/osascript" { return (1, "", "execution error: User canceled. (-128)") }
                 if args == ["reposo", "status"] { return (0, "{\"reposo\":\"off\"}\n", "") }
                 if args == ["policy", "status"] { return (0, answer.line(), "") }
                 return (0, "{\"eco\":\"off\"}\n", "")
             })
             controls.refresh(); await until { controls.reposoHot != nil }
             precondition(controls.reposo == true && controls.message?.contains("no coinciden") == true)
+            // A cancelled password prompt changes nothing, so the notice stays up.
+            controls.setEco(true); await until { !controls.busy }
+            precondition(controls.eco == false && controls.message?.contains("no coinciden") == true)
             answer.set("normal")
             controls.refresh(); await until { controls.reposo == false }
             precondition(controls.reposoHot == true && controls.message == nil)
+        }
+        do {
+            // A driver that has the policy does not accept the set: the file changed alone, so both are read again
+            // and the switch shows the policy the driver kept, with the notice.
+            let controls = Controls(execute: { path, args in
+                if path == "/usr/bin/osascript" {
+                    return (0, "{\"reposo\":\"off\"}\r{\"policy\":null,\"why\":\"failed\"}\n", "")
+                }
+                if args == ["reposo", "status"] { return (0, "{\"reposo\":\"off\"}\n", "") }
+                if args == ["policy", "status"] { return (0, "{\"policy\":\"idle\"}\n", "") }
+                return (0, "{\"eco\":\"off\"}\n", "")
+            })
+            controls.setReposo(false); await until { controls.reposoHot == true }
+            precondition(controls.reposo == true && controls.message?.contains("no coinciden") == true)
         }
         let captured = await Task.detached {
             Controls.runFull("/bin/sh", ["-c", "/usr/bin/head -c 200000 /dev/zero >&2; /usr/bin/printf done"])

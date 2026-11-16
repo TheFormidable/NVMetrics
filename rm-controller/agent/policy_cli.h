@@ -1,8 +1,10 @@
 /* policy_cli.h - NVMetrics' idle mode while apps run: the driver's boost policy.
  * From driver 3.0.1 on, NVRM.kext holds one machine-wide policy that every Vulkan process reads at most once a second
  * before it renews its boost lease (the driver's kexts/NVRM/nvrm_boost_policy_abi.h): undecided (since boot; each
- * process follows NVRM_610_BOOST in nvrm610.conf), idle (nobody asks for full clocks, and what is asked is cleared
- * within a second) and normal (every process boosts per burst of work again, even one started with idle mode on).
+ * process follows NVRM_610_BOOST in nvrm610.conf), idle (nobody asks for full clocks: a process clears what it asked
+ * the next time it submits work, a lease that is not renewed lapses within 3 s, and a process that sits idle with
+ * NVRM_610_BOOST=hold keeps its hold until it submits again or exits) and normal (every process boosts per burst of
+ * work again, even one started with idle mode on).
  * Reading needs no rights; setting needs root (the kext checks it too). The values are the driver's NVRM_BP_*;
  * nvmetrics_agent.c holds them equal to the driver's header when it is built against a driver that has one.
  * Pure, so test_policy_cli.c proves the mapping without a GPU. */
