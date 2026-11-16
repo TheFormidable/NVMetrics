@@ -65,6 +65,16 @@ final class TrackingAnswer {
         tracking.value = false
         link.cancel()
 
+        // only the run loop says a menu is open, and nothing new is offered after it closes: the value that waited
+        // shows all the same, and not before
+        let quiet = MenuHold(1, tracking: { tracking.value })
+        tracking.value = true
+        quiet.offer(2)
+        try? await Task.sleep(nanoseconds: 300_000_000)
+        precondition(quiet.shown == 1)
+        tracking.value = false
+        await until { quiet.shown == 2 }
+
         // follow(): the value is read at once and again after each change, on the main queue's next turn
         let changes = PassthroughSubject<Void, Never>()
         var source = 10

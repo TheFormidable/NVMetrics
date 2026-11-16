@@ -12,7 +12,8 @@
 //  - the main run loop's mode, which is the event-tracking mode for as long as a menu is tracked (the reason a timer
 //    scheduled in the default mode stands still under an open menu). It is also the mode while a window is resized or
 //    a slider is dragged, and then the bar's label waits for a moment too, which nobody sees.
-// A value that waited with only the run loop's mode to go by is shown with the next reading after the menu closed.
+// Nothing announces the end of the run loop's tracking, so while a value waits with only that mode to go by, the mode
+// is looked at again every tenth of a second, and the value is shown once the tracking is over.
 import AppKit
 import Combine
 
@@ -24,6 +25,8 @@ final class MenuHold<Value: Equatable>: ObservableObject {
     private var waiting: Value?
     /// between AppKit's "menu tracking began" and "ended"
     private var menuOpen = false
+    /// a task is looking at the run loop's mode until the tracking is over
+    private var watching = false
     private let tracking: () -> Bool
     private var links: Set<AnyCancellable> = []
 
@@ -38,10 +41,37 @@ final class MenuHold<Value: Equatable>: ObservableObject {
     func offer(_ value: Value) {
         if menuOpen || tracking() {
             waiting = value
+            if !menuOpen { watchTracking() }
             return
         }
         waiting = nil
         if value != shown { shown = value }
+    }
+
+    /// A value waits with only the run loop's mode to go by: look at the mode again every tenth of a second, so that
+    /// the value shows when the tracking ends even if nothing new is offered after it.
+    private func watchTracking() {
+        guard !watching else { return }
+        watching = true
+        Task { @MainActor [weak self] in
+            var looking = true
+            while looking {
+                try? await Task.sleep(nanoseconds: 100_000_000)
+                looking = self?.lookAgain() ?? false
+            }
+        }
+    }
+
+    /// false when there is nothing left to wait for on the run loop's mode: the value was shown, here or by a newer
+    /// offer, or AppKit said a menu opened and will say when it closes
+    private func lookAgain() -> Bool {
+        if !menuOpen, let value = waiting {
+            if tracking() { return true }
+            waiting = nil
+            if value != shown { shown = value }
+        }
+        watching = false
+        return false
     }
 
     func menuOpened() {
