@@ -86,7 +86,7 @@ class TransactionTests(unittest.TestCase):
         self.app=self.d/'Applications'/'NVMetrics.app';self.app.parent.mkdir()
         self.plist=self.d/'Library'/'LaunchDaemons'/'org.nvmetrics.rmguard.plist';self.plist.parent.mkdir()
         self.man=self.root/'.v012-manifest.json';self.receipt=self.root/'.v014-package.json'
-        self.back=self.root/'.v014-package-backup';self.rt=self.root/'Runtime'
+        self.back=self.root/pkg.BACK.name;self.rt=self.root/'Runtime'
         self.payload=self.d/'payload';app=self.payload/'NVMetrics.app';source=self.payload/'service';source.mkdir(parents=True)
         res=app/'Contents/Resources';rt=res/'GuardTools/Runtime';rt.mkdir(parents=True)
         (app/'Contents/Info.plist').write_bytes(plistlib.dumps({'CFBundleIdentifier':'org.nvmetrics.app'}))
@@ -249,8 +249,12 @@ class TransactionTests(unittest.TestCase):
         self.assertIn(marker,(here/'agent'/'nvmetrics_agent.c').read_text())
         for name in ('Verify.command','verify_package.sh'):
             self.assertIn('NVMetrics-%s-Candidate-Intel.pkg'%version,(here/name).read_text())
+        # the folder the build writes to by default is the one the verifier looks in by default
+        digits=version.replace('.','')
+        for name in ('Build.command','build_package.sh','Verify.command','verify_package.sh'):
+            self.assertIn('NVMetrics-v%s-release'%digits,(here/name).read_text())
         # each revision keeps its own backups: under a name another revision already used, the upgrade is refused
-        digits=version.replace('.','');installer=Path(pkg.__file__).read_text()
+        installer=Path(pkg.__file__).read_text()
         self.assertIn("BACK = ROOT/'.v%s-package-backup'"%digits,installer)
         self.assertIn("'.NVMetrics.app.before-v%s'"%digits,installer)
 

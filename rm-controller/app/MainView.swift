@@ -179,9 +179,9 @@ struct MainView: View {
 }
 
 struct MenuContent: View {
-    /// Not observed here, only told the boost mode the user picks. Every value the menu shows comes from `menu`, which
-    /// stands still while the menu is open, so that a new reading does not rebuild the items under the pointer and
-    /// move the highlight (MenuHold.swift).
+    /// Not observed here, only told the boost mode the user picks. Every value the menu shows, except the fan submenu
+    /// (FanGuardMenu, which reads its own model), comes from `menu`, which stands still while the menu is open, so
+    /// that a new reading does not rebuild the items under the pointer and move the highlight (MenuHold.swift).
     let agent: Agent
     @EnvironmentObject var menu: MenuHold<MenuLines>
     @Environment(\.openWindow) private var openWindow
