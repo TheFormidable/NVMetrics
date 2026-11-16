@@ -21,6 +21,13 @@ se muestra como `--`, nunca como un cero.
   relojes máximos (o vuelven a pedirlos) en menos de un segundo, sin cerrar sesión. El archivo sigue mandando después de
   reiniciar. Con un driver anterior solo se escribe el archivo y se aplica al cerrar sesión y volver a entrar. El modo
   reposo no quita el boost que pide el propio NVMetrics (Automático o Máximo), que es una petición aparte.
+  El cambio al momento lo hace solo esta app. Un NVMetrics cuyo agente no tiene la orden `policy` (la candidata 0.14.7
+  de control de ventiladores, por ejemplo) solo escribe el archivo: si en este arranque ya se eligió una política, su
+  interruptor de reposo no cambia nada hasta reiniciar, tampoco al cerrar sesión, porque el driver sigue la política y
+  no el archivo. Esta app lo avisa al abrir su ventana cuando el archivo y la política no coinciden. Reiniciar lo
+  arregla. Sin reiniciar, `sudo NVMetrics.app/Contents/Resources/nvmetrics-agent policy undecided`, con el agente de
+  esta app, hace que cada app vuelva a lo que leyó del archivo al arrancar: las que ya estaban abiertas siguen con el
+  valor de entonces hasta cerrar sesión y volver a entrar.
 - **Modo eco**: pide a la tarjeta que no pase de su potencia nominal (`NV2080_CTRL_CMD_PERF_RATED_TDP_SET_CONTROL`,
   cliente GLOBAL, acción FORCE_LIMIT, el interruptor que NVIDIA documenta para herramientas de usuario). Al quitarlo se
   envía DEFAULT y decide el driver. Se aplica al momento.
@@ -108,6 +115,9 @@ lleva el firmware de la tarjeta. La app no muestra controles que no funcionaría
     nvmetrics-agent watch [ms] [--control]   una línea JSON por lectura (por defecto cada 1000 ms)
     nvmetrics-agent once                     una sola línea
     nvmetrics-agent boost hold               pide relojes máximos hasta Ctrl-C (para probar; sin contraseña)
+    nvmetrics-agent policy [status]          la política de boost del driver: undecided, idle o normal; `null`, con
+                                             el motivo en `why`, si el driver cargado no la tiene (es del 3.0.1)
+    sudo nvmetrics-agent policy idle|normal|undecided   la cambia (solo root); undecided es como queda al arrancar
 
 Cada línea lleva `"health"` (`null` antes del driver 3.0). Con `--control`, que es como lo lanza la app, el agente lee
 órdenes de su entrada estándar, una por línea: `boost off`, `boost auto` o `boost max`, y cada línea lleva también
