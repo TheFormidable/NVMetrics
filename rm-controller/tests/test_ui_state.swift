@@ -67,6 +67,14 @@ final class ControlTransport: @unchecked Sendable {
     }
 }
 
+// The driver's boost policy as the agent's "policy status" reports it; a test changes it between two refreshes.
+final class PolicyAnswer: @unchecked Sendable {
+    private let lock = NSLock()
+    private var policy = "idle"
+    func set(_ value: String) { lock.lock(); policy = value; lock.unlock() }
+    func line() -> String { lock.lock(); defer { lock.unlock() }; return "{\"policy\":\"" + policy + "\"}\n" }
+}
+
 @main struct UIStateTests {
     @MainActor static func until(_ condition: () -> Bool) async {
         for _ in 0..<3000 {
@@ -163,6 +171,45 @@ final class ControlTransport: @unchecked Sendable {
             precondition(model.currentPercent == 50 && model.targetPercent == 30 && model.canApply)
             precondition(model.message?.contains("50.10 W") == true)
             model.restoreAuto();await until { !model.busy }
+        }
+        do {
+            // Driver with the boost policy: one prompt writes the file and sets the policy, and "do shell script"
+            // hands the two answers back joined by a carriage return.
+            let controls = Controls(execute: { path, args in
+                guard path == "/usr/bin/osascript" else { return (0, "{}", "") }
+                return args.last!.contains("'policy' 'idle'")
+                    ? (0, "{\"reposo\":\"on\"}\r{\"policy\":\"idle\"}\n", "")
+                    : (0, "{\"reposo\":\"off\"}\r{\"policy\":\"normal\"}\n", "")
+            })
+            controls.setReposo(true); await until { !controls.busy }
+            precondition(controls.reposo == true && controls.reposoHot == true)
+            precondition(controls.message?.contains("sin cerrar sesión") == true)
+            controls.setReposo(false); await until { !controls.busy }
+            precondition(controls.reposo == false && controls.reposoHot == true)
+            precondition(controls.message?.contains("quitado en todas las apps abiertas") == true)
+        }
+        do {
+            // Driver without the policy (3.0): the second helper answers null, the file alone decides and the
+            // message still says to log out and in.
+            let controls = Controls(execute: { _, _ in (0, "{\"reposo\":\"on\"}\r{\"policy\":null,\"why\":\"driver\"}\n", "") })
+            controls.setReposo(true); await until { !controls.busy }
+            precondition(controls.reposo == true && controls.reposoHot == false)
+            precondition(controls.message?.contains("Cierra sesión") == true)
+        }
+        do {
+            // The file says off while the policy chosen earlier in this boot says idle: the switch shows what the
+            // driver does and a notice says the two disagree. The notice comes down when they agree again.
+            let answer = PolicyAnswer()
+            let controls = Controls(execute: { _, args in
+                if args == ["reposo", "status"] { return (0, "{\"reposo\":\"off\"}\n", "") }
+                if args == ["policy", "status"] { return (0, answer.line(), "") }
+                return (0, "{\"eco\":\"off\"}\n", "")
+            })
+            controls.refresh(); await until { controls.reposoHot != nil }
+            precondition(controls.reposo == true && controls.message?.contains("no coinciden") == true)
+            answer.set("normal")
+            controls.refresh(); await until { controls.reposo == false }
+            precondition(controls.reposoHot == true && controls.message == nil)
         }
         let captured = await Task.detached {
             Controls.runFull("/bin/sh", ["-c", "/usr/bin/head -c 200000 /dev/zero >&2; /usr/bin/printf done"])

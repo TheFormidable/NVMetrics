@@ -35,7 +35,7 @@ Manual comienza al 50 % y desciende por pasos verificados de 5 % hasta un mínim
 
 No se elevaron los límites: entrada térmica GPU <60 °C, VRAM <84 °C, ≤60 W y utilización ≤20 %; reducción por debajo de 50 % con GPU <58 °C, VRAM <82 °C, ≤50 W y utilización ≤20 %. En Manual, AUTO ante GPU ≥65 °C, VRAM ≥88 °C, >145 W, datos críticos inválidos o pérdida de supervisión. Se mantienen el guard a 250 ms, heartbeat nativo de 6 s, lease del cliente de 8 s y rescate separado. Son políticas experimentales de la aplicación, no límites certificados por el firmware.
 
-Eco modifica el límite de potencia mediante su ruta existente. Reposo guarda la configuración de boost del usuario mediante su ruta existente. Ninguno activa Manual ni cambia la política térmica del controlador de ventiladores. Reposo puede requerir cerrar sesión para afectar procesos ya abiertos.
+Eco modifica el límite de potencia mediante su ruta existente. Reposo guarda la configuración de boost del usuario mediante su ruta existente y, con el driver 3.0.1 o posterior, cambia en la misma petición de contraseña la política de boost del driver (`nvmetrics-agent policy idle|normal`), que las apps ya abiertas siguen en menos de un segundo. Ninguno activa Manual ni cambia la política térmica del controlador de ventiladores. Con un driver anterior, Reposo sigue requiriendo cerrar sesión para afectar procesos ya abiertos. Si el archivo y la política del driver no coinciden (los cambió por separado otra versión de NVMetrics o un cambio a mano), el interruptor muestra lo que el driver aplica y la ventana lo avisa; el driver sigue su política hasta reiniciar.
 
 ## Construcción y pruebas
 
@@ -50,9 +50,9 @@ NVMETRICS_BUILD_PYTHON="$PWD/.build-venv/bin/python" \
   ./build_package.sh sources/NVMetrics sources/nvidia-macos-driver /ruta/nueva/de/salida
 ```
 
-La descarga inicial de encabezados NVIDIA requiere red. Se reutilizan los tags de la base: 610.57.04 con los parches NullMoth incluidos y el diseño RUSD de 620.70.06. `NVMETRICS_BUILD_CACHE` permite indicar otra caché de compilación. El código base fijado conserva sus hashes originales.
+La descarga inicial de encabezados NVIDIA requiere red. Se reutilizan los tags de la base: 610.57.04 con los parches NullMoth incluidos y el diseño RUSD de 620.70.06. `NVMETRICS_BUILD_CACHE` permite indicar otra caché de compilación. El código base fijado conserva sus hashes originales. La copia del driver bajo `sources/nvidia-macos-driver` es la de NullMoth 3.0.1 (commit b80056ef de su rama, todavía sin fusionar): sus parches de NVK llevan la cabecera de la política de boost, que el extractor de `agent/extract_rm_layer.py` saca para que el agente tenga la orden `policy`. El agente así compilado funciona también con el driver 3.0; ahí `policy` responde que el driver no la tiene y Reposo se aplica como antes.
 
-`run_tests.sh` ejecuta 101 pruebas Python, 10 suites C, 2 suites Swift y la suite shell de configuración. No escribe controles GPU. Incluye los tests originales de Eco, boost, protección, salud, telemetría y configuración, además de las regresiones nuevas. La compilación ejecuta todas las pruebas, valida el runtime congelado, verifica la firma de la app y comprueba la extracción exacta del paquete final.
+`run_tests.sh` ejecuta 101 pruebas Python, 11 suites C, 2 suites Swift y la suite shell de configuración. No escribe controles GPU. Incluye los tests originales de Eco, boost, protección, salud, telemetría y configuración, además de las regresiones nuevas. La compilación ejecuta todas las pruebas, valida el runtime congelado, verifica la firma de la app y comprueba la extracción exacta del paquete final.
 
 ```sh
 NVMETRICS_BUILD_PYTHON="$PWD/.build-venv/bin/python" \

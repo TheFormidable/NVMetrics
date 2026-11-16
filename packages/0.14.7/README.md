@@ -5,3 +5,5 @@ Instalador autónomo para macOS x86_64 (mínimo declarado: macOS 14), una RTX 50
 [Descargar instalador](NVMetrics-0.14.7-Candidate-Intel.pkg?raw=true) · [SHA-256](SHA256SUMS.txt) · [Código, compilación y pruebas](../../rm-controller/README.md) · [Auditoría](../../rm-controller/AUDITORIA-v0147.md)
 
 Candidata de estabilización. Falta validar físicamente el recorrido completo 100→30 % en esta revisión. App con firma ad hoc; paquete sin firma Developer ID ni notarización.
+
+Este instalador se compiló antes de añadir el Reposo al momento (política de boost del driver 3.0.1) y no lo incluye. Para tenerlo hay que volver a compilar el paquete desde [`rm-controller/`](../../rm-controller/README.md).

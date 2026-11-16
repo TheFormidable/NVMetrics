@@ -1,3 +1,11 @@
+# 0.14.7, añadido tras compilar el paquete — Reposo al momento (2026-11-16)
+
+Con el driver NullMoth 3.0.1 o posterior, el interruptor de Reposo escribe el archivo y, en la misma petición de contraseña, cambia la política de boost del driver: las apps ya abiertas dejan de pedir relojes máximos, o vuelven a pedirlos, sin cerrar sesión. Con un driver anterior se comporta como antes. El agente gana la orden `policy [status|idle|normal|undecided]`. La respuesta de las dos órdenes se lee con cualquier fin de línea, porque `do shell script` las devuelve unidas por un retorno de carro. Cuando el archivo y la política no coinciden, el interruptor muestra lo que el driver aplica, la ventana lo avisa y el registro de la curva AUTO etiqueta Reposo con ese mismo estado. No cambia nada del control de ventiladores, del guard ni del rescate.
+
+La copia del driver pasa a la 3.0.1 (cuatro parches nuevos de NVK, `build/build_nvk.sh`, `NOTICE` y dos licencias) y la compilación usa `agent/extract_rm_layer.py` de esta revisión, que extrae la cabecera de la política. Pruebas nuevas: `tests/test_policy_cli.c` y tres casos en `tests/test_ui_state.swift`. `build_package.sh` se detiene si el agente queda sin la orden `policy`.
+
+El instalador de `packages/0.14.7/` es anterior a este cambio y no lo incluye: hay que volver a compilar el paquete. Nada de esto se ha compilado ni ejecutado en un Mac; las medidas de `AUDITORIA-v0147.md` son del paquete anterior.
+
 # 0.14.7 — menor demora al bajar (2026-11-16)
 
 Lector RUSD persistente sólo durante Manual, correlación de peticiones y avance independiente de sensores. Conserva todas las pausas y límites de seguridad. Mantiene el destino al rechazar una bajada e informa del valor que la bloqueó. Pruebas de errores, interfaz y migración desde 0.14.6. Medición real del lector documentada en AUDITORIA-v0147.md.

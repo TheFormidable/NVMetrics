@@ -22,6 +22,8 @@ mkdir -p "$OUT" "$STAGE/scripts" "$STAGE/payload" "$STAGE/build"
 /usr/bin/ditto "$REPO" "$STAGE/repo"
 cp "$HERE/app/"*.swift "$STAGE/repo/app/Sources/"
 cp "$HERE/agent/"*.h "$HERE/agent/"*.c "$STAGE/repo/agent/"
+# The extractor of the driver's RM layer that knows the 3.0.1 boost-policy header (the base's stops at 3.0).
+cp "$HERE/agent/extract_rm_layer.py" "$STAGE/repo/agent/extract_rm_layer.py"
 cp "$HERE/agent/build.sh" "$STAGE/repo/agent/build.sh"
 cp "$HERE/app/build_app.sh" "$STAGE/repo/app/build_app.sh"
 "$STAGE/repo/app/build_app.sh" "$DRIVER" "$STAGE/build"
@@ -30,6 +32,15 @@ APP="$STAGE/payload/NVMetrics.app"
 AGENT="$APP/Contents/Resources/nvmetrics-agent"
 test -x "$AGENT"
 strings "$AGENT" | grep 'NVMETRICS_RM_V0147_SESSION_READER' >/dev/null
+# Idle mode for the apps already open needs the "policy" command built against the driver's boost-policy header.
+# Without the header the agent still builds and answers {"policy":null,"why":"build"}: stop here instead.
+rc=0; "$AGENT" policy bogus >"$STAGE/policy-check.log" 2>&1 || rc=$?
+[[ $rc == 2 ]] && grep -F 'usage: nvmetrics-agent policy' "$STAGE/policy-check.log" >/dev/null || {
+  echo 'Agent was built without the policy command.' >&2; exit 1;
+}
+strings "$AGENT" | grep -F '"why":"build"' >/dev/null && {
+  echo 'Agent was built without the driver boost-policy header (policy would answer "build").' >&2; exit 1;
+}
 SIGN_ARGS=()
 if [[ -n "${NVMETRICS_APP_IDENTITY:-}" ]]; then SIGN_ARGS=(--codesign-identity "$NVMETRICS_APP_IDENTITY"); fi
 # Freeze the Python interpreter and standard library into relocatable onedir.
