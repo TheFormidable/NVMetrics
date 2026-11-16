@@ -8,6 +8,7 @@ without building the whole patched Mesa tree. The chain and its order are read f
 this repository: the files are made fresh from the checkout each build. Python 3.9+, standard library only."""
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -66,32 +67,35 @@ def main():
     driver, out = os.path.abspath(sys.argv[1]), os.path.abspath(sys.argv[2])
     nvk = os.path.join(driver, "nvk")
     work = tempfile.mkdtemp(prefix="nvmetrics-rm.")
-    applied = 0
-    for name in chain(driver):
-        lines = open(os.path.join(nvk, name), encoding="utf-8", errors="surrogateescape").read().splitlines(True)
-        keep = [body for path, body in sections(lines)
-                if path and path.startswith(PREFIX) and path[len(PREFIX):] in WANT + OPTIONAL]
-        if not keep:
-            continue
-        mini = "".join("".join(b) for b in keep)
-        r = subprocess.run(["patch", "-p1", "-s", "--no-backup-if-mismatch", "-d", work],
-                           input=mini.encode("utf-8", "surrogateescape"), capture_output=True)
-        if r.returncode != 0:
-            sys.exit("extract_rm_layer: %s does not apply:\n%s%s" % (name, r.stdout.decode(), r.stderr.decode()))
-        applied += 1
-    os.makedirs(out, exist_ok=True)
-    made = 0
-    for f in WANT + OPTIONAL:
-        src = os.path.join(work, PREFIX, f)
-        if not os.path.isfile(src):
-            if f in OPTIONAL:
+    try:   # the work folder is removed however this ends (it used to stay in the temporary folder after every run)
+        applied = 0
+        for name in chain(driver):
+            lines = open(os.path.join(nvk, name), encoding="utf-8", errors="surrogateescape").read().splitlines(True)
+            keep = [body for path, body in sections(lines)
+                    if path and path.startswith(PREFIX) and path[len(PREFIX):] in WANT + OPTIONAL]
+            if not keep:
                 continue
-            sys.exit("extract_rm_layer: the chain did not produce %s" % f)
-        os.makedirs(os.path.dirname(os.path.join(out, f)), exist_ok=True)
-        with open(src, "rb") as a, open(os.path.join(out, f), "wb") as b:
-            b.write(a.read())
-        made += 1
-    print("extract_rm_layer: %d files from %d patches -> %s" % (made, applied, out))
+            mini = "".join("".join(b) for b in keep)
+            r = subprocess.run(["patch", "-p1", "-s", "--no-backup-if-mismatch", "-d", work],
+                               input=mini.encode("utf-8", "surrogateescape"), capture_output=True)
+            if r.returncode != 0:
+                sys.exit("extract_rm_layer: %s does not apply:\n%s%s" % (name, r.stdout.decode(), r.stderr.decode()))
+            applied += 1
+        os.makedirs(out, exist_ok=True)
+        made = 0
+        for f in WANT + OPTIONAL:
+            src = os.path.join(work, PREFIX, f)
+            if not os.path.isfile(src):
+                if f in OPTIONAL:
+                    continue
+                sys.exit("extract_rm_layer: the chain did not produce %s" % f)
+            os.makedirs(os.path.dirname(os.path.join(out, f)), exist_ok=True)
+            with open(src, "rb") as a, open(os.path.join(out, f), "wb") as b:
+                b.write(a.read())
+            made += 1
+        print("extract_rm_layer: %d files from %d patches -> %s" % (made, applied, out))
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
 
 
 if __name__ == "__main__":
