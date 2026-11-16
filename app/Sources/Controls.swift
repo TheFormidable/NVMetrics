@@ -45,7 +45,8 @@ final class Controls: ObservableObject {
     func setReposo(_ on: Bool) {
         // one prompt: the file first (it decides after a reboot), then the driver's policy for the apps already open;
         // an older driver refuses the second and the file alone still applies as apps restart
-        admin([setting, "reposo", on ? "on" : "off"], then: [Agent.agentPath, "policy", on ? "idle" : "normal"]) { out in
+        admin([setting, "reposo", on ? "on" : "off"],
+              followedBy: [Agent.agentPath, "policy", on ? "idle" : "normal"]) { out in
             let policy = Controls.fieldAny(out, "policy")
             self.reposo = Controls.reposoState(conf: Controls.fieldAny(out, "reposo"), policy: policy)
             let hot = policy == (on ? "idle" : "normal")
@@ -68,9 +69,9 @@ final class Controls: ObservableObject {
     }
 
     /// The file and the driver's policy disagree: the file changed after a policy was chosen in this boot and the policy
-    /// did not (an NVMetrics whose agent has no "policy", the 0.14.7 fan candidate among them; an edit by hand; a set
-    /// the driver refused), or the policy was set by hand. The driver follows the policy until a reboot, whatever the
-    /// file says, so the switch here shows the policy and this says why. Nil when they agree or either is unknown.
+    /// did not (an NVMetrics whose agent has no "policy"; an edit by hand; a set the driver refused), or the policy was
+    /// set by hand. The driver follows the policy until a reboot, whatever the file says, so the switch here shows the
+    /// policy and this says why. Nil when they agree or either is unknown.
     nonisolated static func reposoMismatch(conf: String?, policy: String?) -> String? {
         let what: String
         if policy == "idle" && conf == "off" {
@@ -94,12 +95,16 @@ final class Controls: ObservableObject {
         }
     }
 
-    /// argv as root; `then`, when given, runs after it only if it succeeded, and its own failure does not fail the call
-    private func admin(_ argv: [String], then: [String]? = nil, done: @escaping @MainActor @Sendable (String) -> Void) {
+    /// argv as root; `followedBy`, when given, runs after it only if it succeeded, and its own failure does not fail
+    /// the call
+    private func admin(_ argv: [String], followedBy second: [String]? = nil,
+                       done: @escaping @MainActor @Sendable (String) -> Void) {
         busy = true
         Task.detached {
             var cmd = argv.map(Controls.shellQuote).joined(separator: " ")
-            if let then { cmd += " && { " + then.map(Controls.shellQuote).joined(separator: " ") + " || true; }" }
+            if let more = second {
+                cmd += " && { " + more.map(Controls.shellQuote).joined(separator: " ") + " || true; }"
+            }
             let script = "do shell script \(Controls.appleScriptString(cmd)) with administrator privileges"
             // osascript, out of process: NSAppleScript is not safe off the main thread, and this waits on a password
             let (status, out, err) = Controls.runFull("/usr/bin/osascript", ["-e", script])
