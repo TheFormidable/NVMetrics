@@ -180,7 +180,7 @@ struct FirmwareCurveView: View {
                     Text("Estado: \(p.pstate.map { "P\($0)" } ?? "—") · reloj: \(p.clock_gpu_mhz.map { "\($0) MHz" } ?? "—") · boost elegido: \(p.boostSelected ?? "—")").font(.caption)
                 }
             }
-            Text("Reposo refleja lo que el driver aplica: con el driver 3.0.1 o posterior el cambio llega al momento; con uno anterior es la configuración guardada, y hay que cerrar sesión y volver a entrar tras cambiarla. P-state y relojes indican el comportamiento observado; la histéresis, VRAM, carga y potencia pueden producir RPM distintas a igual temperatura.").font(.caption).foregroundStyle(.secondary)
+            Text("Reposo refleja lo que el driver aplica: con el driver 3.0.1 o posterior el cambio llega al momento; con uno anterior es la configuración guardada, y hay que cerrar sesión y volver a entrar tras cambiarla. En el CSV, reposo_configured es este mismo estado; las muestras anteriores a la 0.14.8 guardan la configuración del archivo. P-state y relojes indican el comportamiento observado; la histéresis, VRAM, carga y potencia pueden producir RPM distintas a igual temperatura.").font(.caption).foregroundStyle(.secondary)
             HStack { Text("Historial local: \(recorder.points.count)/3000").font(.caption); Spacer(); Button("Exportar CSV…") { recorder.exportCSV() }.disabled(recorder.points.isEmpty) }
         }.padding(24).frame(width: 620)
     }

@@ -6,6 +6,8 @@ La revisión 0.14.7 está disponible en [`rm-controller/`](rm-controller/README.
 
 [Instalador autónomo Intel y SHA-256](packages/0.14.7/README.md) · [Auditoría y validación pendiente](rm-controller/AUDITORIA-v0147.md).
 
+El código de `rm-controller/` ya es la 0.14.8: añade el Reposo al momento (con el driver NullMoth 3.0.1) y corrige el salto de la selección en el menú de la barra. Todavía no tiene instalador publicado; se compila desde `rm-controller/`.
+
 Es una candidata para RTX 5050 con NullMoth: la nueva secuencia física 100→30 % todavía requiere validación supervisada. El código previo de `agent/` y `app/` se conserva; la documentación que sigue describe esa implementación anterior.
 
 Monitor de la gráfica para el driver [NullMoth](https://github.com/TheFormidable/nvidia-macos-driver) en macOS: un icono en la barra de menús con la temperatura y una ventana con

@@ -56,9 +56,9 @@ class IPCServer:
         try:
             req=decode_request(payload);op=req['op']
             if op=='ping':
-                return {'ok':True,'service':'NVMetrics RM v0.14.7','writes_enabled':self.physical.enabled,
+                return {'ok':True,'service':'NVMetrics RM v0.14.8','writes_enabled':self.physical.enabled,
                         'authorized_uid':self.allowed_uid,'sequential_sessions':True,'physical_one_shot':False,
-                        'revision':'0.14.7','manual_floor':50 if self.physical.load_profile else 30,
+                        'revision':'0.14.8','manual_floor':50 if self.physical.load_profile else 30,
                         'safety_profile':self.physical.safety_profile}
             if op in ('status','inspect'):
                 return {'ok':True,'operation':op,'data':self.backend.call(op,progress=self.physical.guard_progress) if self.physical.token else self.backend.call(op)}

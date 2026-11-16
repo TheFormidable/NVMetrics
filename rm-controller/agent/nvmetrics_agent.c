@@ -146,7 +146,13 @@ static int eco_status(void)
 static int policy_cli(int argc, char **argv)
 {
     enum pol_cmd c = argc > 3 ? POL_BAD : pol_parse(argc > 2 ? argv[2] : NULL);
-    if (c == POL_BAD) { fprintf(stderr, "usage: nvmetrics-agent policy [status|idle|normal|undecided]\n"); return 2; }
+    if (c == POL_BAD) {
+        /* the second line is this revision's marker, which the package installer and build_package.sh look for in
+           the agent they are about to install (package_install.py MARKER): 0.14.8 is the first with "policy" */
+        fprintf(stderr, "usage: nvmetrics-agent policy [status|idle|normal|undecided]\n"
+                        "NVMETRICS_RM_V0148_BOOST_POLICY\n");
+        return 2;
+    }
     if (c != POL_STATUS && geteuid() != 0) { fprintf(stderr, "nvmetrics-agent: policy idle/normal/undecided needs root\n"); return 2; }
 #ifdef NVM_HAVE_BOOST_POLICY
     int fd = NVRM_OPEN(NVRM_CTL_NODE_NAME);
