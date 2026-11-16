@@ -37,4 +37,15 @@ static inline const char *pol_name(uint64_t v)
     if (v == POL_V_NORMAL) return "normal";
     return "other";
 }
+
+/* Why a call gave no policy, for the "why" of the answer. r: what the call answered. after: for a set that was refused,
+ * what a read made right after it answered (POL_R_OK when no read was made). A driver without the selector (3.0) does
+ * not tell an unknown selector from a bad value, so it answers a set as a refusal and only a read as "no method": the
+ * read after a refused set is what tells "this driver has no policy" from "the kext said no". */
+enum { POL_R_OK = 0, POL_R_NO_METHOD = 1, POL_R_REFUSED = 2, POL_R_FAILED = 3 };
+static inline const char *pol_why(int r, int after)
+{
+    if (r == POL_R_NO_METHOD || (r == POL_R_REFUSED && after == POL_R_NO_METHOD)) return "driver";
+    return r == POL_R_REFUSED ? "refused" : "failed";
+}
 #endif

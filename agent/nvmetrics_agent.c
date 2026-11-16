@@ -22,7 +22,8 @@
  *                                    loaded driver has none, "build" when this agent was built against a driver
  *                                    checkout that has none, "failed" when the call failed
  *   nvmetrics-agent policy idle|normal|undecided
- *                                    root only: set it ("refused" when the kext says no). Prints the policy afterwards.
+ *                                    root only: set it ("refused" when the kext says no, "driver" when the loaded
+ *                                    driver has no policy). Prints the policy afterwards.
  *
  * Reading and the boost request need no special rights (PERF_BOOST is a non-privileged control; the request lives only
  * as long as this process's RM client). Nothing here can set fan speed, power limit, clock offsets or voltage: the open
@@ -152,9 +153,13 @@ static int policy_cli(int argc, char **argv)
     if (fd < 0) { fprintf(stderr, "nvmetrics-agent: cannot open %s (is the driver loaded?)\n", NVRM_CTL_NODE_NAME); return 2; }
     uint64_t v = 0;
     int r = nvrm_xnu_boost_policy(fd, c == POL_STATUS ? NVRM_BP_OP_READ : NVRM_BP_OP_SET, pol_value(c), &v);
+    int after = 0;   /* a refused set: is it the kext saying no, or a 3.0 driver that has no policy? (policy_cli.h) */
+    if (c != POL_STATUS && r == NVRM_XNU_REFUSED) { uint64_t t = 0; after = nvrm_xnu_boost_policy(fd, NVRM_BP_OP_READ, 0, &t); }
     NVRM_CLOSE(fd);
     if (r == 0) { printf("{\"policy\":\"%s\"}\n", pol_name(v)); return 0; }
-    printf("{\"policy\":null,\"why\":\"%s\"}\n", r == NVRM_XNU_NO_METHOD ? "driver" : r == NVRM_XNU_REFUSED ? "refused" : "failed");
+#define POL_R(x) ((x) == 0 ? POL_R_OK : (x) == NVRM_XNU_NO_METHOD ? POL_R_NO_METHOD : (x) == NVRM_XNU_REFUSED ? POL_R_REFUSED : POL_R_FAILED)
+    printf("{\"policy\":null,\"why\":\"%s\"}\n", pol_why(POL_R(r), POL_R(after)));
+#undef POL_R
     return 3;
 #else
     printf("{\"policy\":null,\"why\":\"build\"}\n");

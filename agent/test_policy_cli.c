@@ -23,6 +23,13 @@ int main(void)
           !strcmp(pol_name(pol_value(POL_IDLE)), "idle") && !strcmp(pol_name(pol_value(POL_NORMAL)), "normal")
           && !strcmp(pol_name(pol_value(POL_UNDECIDED)), "undecided"));
     check("a value this tool does not know reads as \"other\"", !strcmp(pol_name(3), "other") && !strcmp(pol_name(~0ull), "other"));
+    check("a read that finds no selector is a driver without the policy", !strcmp(pol_why(POL_R_NO_METHOD, POL_R_OK), "driver"));
+    check("a refused set followed by a read that finds no selector is that driver too (3.0 answers a set as a refusal)",
+          !strcmp(pol_why(POL_R_REFUSED, POL_R_NO_METHOD), "driver"));
+    check("a refused set on a driver that answers the read is the kext saying no",
+          !strcmp(pol_why(POL_R_REFUSED, POL_R_OK), "refused") && !strcmp(pol_why(POL_R_REFUSED, POL_R_FAILED), "refused"));
+    check("anything else failed, whatever the read after it said",
+          !strcmp(pol_why(POL_R_FAILED, POL_R_OK), "failed") && !strcmp(pol_why(POL_R_FAILED, POL_R_NO_METHOD), "failed"));
     printf("%d failed\n", fails);
     return fails != 0;
 }
