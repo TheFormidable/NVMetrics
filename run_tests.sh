@@ -8,7 +8,7 @@ T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
 "$H/agent/fetch_headers.sh" "$D" "$W" >/dev/null
 O=$W/ogkm; fails=0
 INC="-I$H/agent -I$W/rusd620 -I$O/src/common/sdk/nvidia/inc"
-for t in test_metrics_json test_eco_policy test_boost_auto test_health test_protect; do
+for t in test_metrics_json test_eco_policy test_boost_auto test_health test_protect test_policy_cli; do
   cc -Wall -Wno-unused-function $INC "$H/agent/$t.c" -o "$T/$t" && "$T/$t" || fails=$((fails+1))
 done
 "$H/agent/test_fan_preview.sh" || fails=$((fails+1))

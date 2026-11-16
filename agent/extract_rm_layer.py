@@ -16,8 +16,10 @@ import tempfile
 # <out>/nvkmd/nvrm/*.c and <out>/nvmtl_cfg.h
 WANT = ("nvkmd/nvrm/nvRmApi.c", "nvkmd/nvrm/nvRmApi.h", "nvkmd/nvrm/nvrm_xnu.c", "nvkmd/nvrm/nvrm_xnu.h",
         "nvkmd/nvrm/nvrm_surfshare_abi.h", "nvmtl_cfg.h")
-# headers that nvRmApi.h / nvrm_xnu.c include from 3.0 on (channel recovery, event wait, fence); absent in 2.9
-OPTIONAL = ("nvkmd/nvrm/nvrm_chan_note_abi.h", "nvkmd/nvrm/nvrm_evwait.h", "nvkmd/nvrm/nvrm_fence_abi.h")
+# headers that nvRmApi.h / nvrm_xnu.c include from 3.0 on (channel recovery, event wait, fence) and from 3.0.1 on (the
+# kext's boost policy, which also tells nvmetrics_agent.c that its "policy" command can be built); absent in 2.9
+OPTIONAL = ("nvkmd/nvrm/nvrm_chan_note_abi.h", "nvkmd/nvrm/nvrm_evwait.h", "nvkmd/nvrm/nvrm_fence_abi.h",
+            "nvkmd/nvrm/nvrm_boost_policy_abi.h")
 PREFIX = "src/nouveau/vulkan/"
 
 

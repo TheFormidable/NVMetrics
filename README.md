@@ -15,8 +15,12 @@ se muestra como `--`, nunca como un cero.
 ## Qué controla
 
 - **Modo reposo**: escribe `NVRM_610_BOOST=0` en el bloque "my settings" de `/Library/GPUBundles/nvmtl/nvrm610.conf`
-  (`agent/nvmetrics-setting.sh`), para que el escritorio deje de pedir relojes máximos y la tarjeta pueda bajar a reposo. Se
-  aplica al cerrar sesión y volver a entrar. Al quitarlo se borra solo esa línea.
+  (`agent/nvmetrics-setting.sh`), para que el escritorio deje de pedir relojes máximos y la tarjeta pueda bajar a reposo. Al
+  quitarlo se borra solo esa línea. Con el driver 3.0.1 o posterior, en la misma petición de contraseña cambia también la
+  política de boost del driver (`nvmetrics-agent policy idle|normal`): las apps que ya están abiertas dejan de pedir
+  relojes máximos (o vuelven a pedirlos) en menos de un segundo, sin cerrar sesión. El archivo sigue mandando después de
+  reiniciar. Con un driver anterior solo se escribe el archivo y se aplica al cerrar sesión y volver a entrar. El modo
+  reposo no quita el boost que pide el propio NVMetrics (Automático o Máximo), que es una petición aparte.
 - **Modo eco**: pide a la tarjeta que no pase de su potencia nominal (`NV2080_CTRL_CMD_PERF_RATED_TDP_SET_CONTROL`,
   cliente GLOBAL, acción FORCE_LIMIT, el interruptor que NVIDIA documenta para herramientas de usuario). Al quitarlo se
   envía DEFAULT y decide el driver. Se aplica al momento.

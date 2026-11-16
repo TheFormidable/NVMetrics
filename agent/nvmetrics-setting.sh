@@ -8,7 +8,9 @@
 # The line lives in the user's own block of /Library/GPUBundles/nvmtl/nvrm610.conf ("# --- my settings, kept on
 # update ---" ... "# --- end my settings ---"): the plugin reads the file top to bottom and the last line for a key wins,
 # and the driver's package/install.sh keeps that block across updates. The block is created at the end of the file when missing.
-# Nothing outside the block is touched. It takes effect for each app when it next starts (log out and in for all).
+# Nothing outside the block is touched. It takes effect for each app when it next starts (log out and in for all); the
+# app also sets the driver's boost policy in the same prompt (nvmetrics-agent policy idle|normal, driver 3.0.1 on),
+# which reaches the apps already running.
 #
 # The file must be a regular file (not a link) owned by root and not writable by others; anything else is refused and
 # nothing changes. The new file is written next to the old one and renamed over it, keeping owner and mode.

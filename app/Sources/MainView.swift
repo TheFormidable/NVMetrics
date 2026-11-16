@@ -140,7 +140,9 @@ struct MainView: View {
     private func modes(_ th: Theme) -> some View {
         HStack(alignment: .top, spacing: 12) {
             modeCard(th, title: "Modo reposo", icon: "moon.fill", value: controls.reposo,
-                     detail: "Deja que la gráfica baje a su estado de bajo consumo cuando no haces nada. Se aplica al cerrar sesión y volver a entrar.") {
+                     detail: "Deja que la gráfica baje a su estado de bajo consumo cuando no haces nada. "
+                         + (controls.reposoHot == true ? "Se aplica al momento, también a las apps abiertas."
+                                                       : "Se aplica al cerrar sesión y volver a entrar.")) {
                 controls.setReposo($0)
             }
             modeCard(th, title: "Modo eco", icon: "leaf.fill", value: controls.eco,
