@@ -179,23 +179,31 @@ struct MainView: View {
 }
 
 struct MenuContent: View {
-    @EnvironmentObject var agent: Agent
-    @EnvironmentObject var controls: Controls
+    /// Not observed here, only told the boost mode the user picks. Every value the menu shows comes from `menu`, which
+    /// stands still while the menu is open, so that a new reading does not rebuild the items under the pointer and
+    /// move the highlight (MenuHold.swift).
+    let agent: Agent
+    @EnvironmentObject var menu: MenuHold<MenuLines>
     @Environment(\.openWindow) private var openWindow
 
+    init(agent: Agent) {
+        self.agent = agent
+    }
+
     var body: some View {
-        let s = agent.latest
-        if let first = Alerts.list(agent.alertReadings, reposo: controls.reposo).first { Text(first.menuText) }
+        let lines = menu.shown
+        let s = lines.sample
+        if let alert = lines.alert { Text(alert) }
         Text("Temperatura: \(Fmt.num(s?.temp_gpu_c, 0)) °C")
         Text("Consumo: \(Fmt.num(s?.power_w, 0)) W · \(s?.pstate.map { "P\($0)" } ?? "--")")
         Text("Reloj: \(Fmt.int(s?.clock_gpu_mhz)) MHz · Uso: \(Fmt.int(s?.util_gpu_pct)) %")
         Text("Ventilador: \(fanText(s?.fan_rpm))")
-        if let p = agent.problem, s == nil { Text(p) }
+        if let p = lines.problem, s == nil { Text(p) }
         Divider()
         FanGuardMenu()
         Divider()
         // a Picker in a menu-style MenuBarExtra is a submenu with a checkmark on the current mode
-        Picker("Rendimiento de la GPU", selection: $agent.boostMode) {
+        Picker("Rendimiento de la GPU", selection: Binding(get: { lines.boost }, set: { agent.boostMode = $0 })) {
             ForEach(BoostMode.allCases, id: \.self) { m in Text(m.label).tag(m) }
         }
         Button("Abrir NVMetrics") { openWindow(id: "main"); NSApp.activate(ignoringOtherApps: true) }

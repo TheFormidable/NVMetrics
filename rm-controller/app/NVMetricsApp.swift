@@ -11,24 +11,34 @@ struct NVMetricsApp: App {
     @StateObject private var controls = Controls()
     @StateObject private var fanGuard = FanGuardUIModel()
     @StateObject private var recorder = AutoCurveRecorder()
+    /// what the label in the bar and its menu show: the agent's readings, held still while a menu is open
+    @StateObject private var menu = MenuHold(MenuLines())
 
     var body: some Scene {
         MenuBarExtra {
-            MenuContent().environmentObject(agent).environmentObject(controls).environmentObject(fanGuard)
+            MenuContent(agent: agent).environmentObject(menu).environmentObject(fanGuard)
+                .environmentObject(agent).environmentObject(controls)
         } label: {
-            let s = agent.latest
-            let mark = Alerts.urgent(agent.alertReadings) ? "\u{26A0}\u{FE0E} " : ""    // ⚠︎ in its text form, for a danger or a warning
-            let temp = s?.temp_gpu_c.map { String(format: "%.0f°", $0) } ?? "GPU --"
+            let lines = menu.shown
+            let mark = lines.urgent ? "\u{26A0}\u{FE0E} " : ""    // ⚠︎ in its text form, for a danger or a warning
+            let temp = lines.sample?.temp_gpu_c.map { String(format: "%.0f°", $0) } ?? "GPU --"
             Text(mark + temp)
                 .monospacedDigit()
                 // the menu's protection line depends on reposo, so it is read at launch too, not only with the window
-                .onAppear { agent.start(); controls.refresh(); recorder.start(agent: agent, controls: controls, fanGuard: fanGuard) }
+                .onAppear {
+                    agent.start(); controls.refresh()
+                    recorder.start(agent: agent, controls: controls, fanGuard: fanGuard)
+                    menu.start(agent: agent, controls: controls)
+                }
         }
         Window("NVMetrics", id: "main") {
             MainView()
                 .environmentObject(agent)
                 .environmentObject(controls).environmentObject(fanGuard)
-                .onAppear { agent.start(); recorder.start(agent: agent, controls: controls, fanGuard: fanGuard) }
+                .onAppear {
+                    agent.start(); recorder.start(agent: agent, controls: controls, fanGuard: fanGuard)
+                    menu.start(agent: agent, controls: controls)
+                }
         }
         .windowStyle(.hiddenTitleBar)
         .windowResizability(.contentSize)
