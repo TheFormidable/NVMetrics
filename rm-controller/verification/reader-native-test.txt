@@ -1,0 +1,1 @@
+PASS: read-only reader framing, overflow rejection and independent critical freshness

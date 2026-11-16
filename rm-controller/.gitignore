@@ -1,0 +1,6 @@
+.build-venv/
+.build-cache/
+.validation/
+__pycache__/
+*.pyc
+.DS_Store
