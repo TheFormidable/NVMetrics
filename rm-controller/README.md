@@ -1,14 +1,22 @@
-# NVMetrics 0.14.7 — candidato de estabilización para Intel
+# NVMetrics 0.14.8 — candidato de estabilización para Intel
 
-Continuación de `NVMetrics-RM-v0145-complete-source.zip`. **No es todavía una versión certificada como estable en control físico.** Se conserva la base integrada bajo `sources/` y se aplican las correcciones de esta revisión durante la compilación en una copia temporal. Esta entrega se incorpora bajo `rm-controller/` para preservar la implementación previa de la raíz del repositorio. El instalador está en [`packages/0.14.7/`](../packages/0.14.7/).
+Continuación de `NVMetrics-RM-v0145-complete-source.zip`. **No es todavía una versión certificada como estable en control físico.** Se conserva la base integrada bajo `sources/` y se aplican las correcciones de esta revisión durante la compilación en una copia temporal. Esta entrega se incorpora bajo `rm-controller/` para preservar la implementación previa de la raíz del repositorio. El instalador publicado, en [`packages/0.14.7/`](../packages/0.14.7/), es el de la 0.14.7; la 0.14.8 de este código (Reposo al momento y menú de la barra, más abajo) todavía no tiene instalador publicado y se compila con los pasos de «Construcción y pruebas».
 
 ## Resultado
 
-- Instalador autónomo `NVMetrics-0.14.7-Candidate-Intel.pkg`, compilado para macOS x86_64, mínimo declarado macOS 14.
+- Instalador autónomo `NVMetrics-0.14.8-Candidate-Intel.pkg`, para macOS x86_64, mínimo declarado macOS 14. Se instala sobre la 0.14.7 y las anteriores que el instalador ya aceptaba.
 - Aplicación SwiftUI, agente C y servicio/rescate/cliente Python congelados con PyInstaller 6.22.3. El usuario final no necesita Python, Homebrew, Xcode ni descargar paquetes.
 - Se requiere el driver NullMoth compatible, ya instalado. Este paquete no instala ni modifica el driver.
 - Se mantiene la restricción de la base a una sola RTX 5050 y al diseño RM observado de dos ventiladores, con candidatos de límites RPM 1150/3700. No se amplía a otros modelos.
 - Aplicación con firma ad hoc local. El `.pkg` no tiene firma Developer ID ni notarización; no se presenta como una distribución pública aprobada.
+
+## Reposo al momento y menú de la barra (0.14.8)
+
+**Reposo al momento.** Con el driver NullMoth 3.0.1 o posterior, el interruptor de Reposo cambia también la política de boost del driver, y las apps ya abiertas la siguen sin cerrar sesión (detalle en «Política conservada»). Con el driver 3.0 se comporta como en la 0.14.7.
+
+**Menú de la barra.** Con el menú abierto, cada lectura nueva rehacía sus líneas de telemetría y la selección azul saltaba una, dos o tres filas, lejos del puntero. Ahora el menú y la cifra de la barra leen una copia de los valores que se queda quieta desde que se abre un menú hasta que se cierra (`app/MenuHold.swift`); lo que llega mientras tanto se muestra al cerrarlo. Con el menú abierto, por tanto, sus cifras son las del momento de abrirlo. La ventana sigue en vivo. El submenú de ventiladores no pasa por esa copia y sigue leyendo su propio modelo.
+
+**Versión.** Es 0.14.8 y no una 0.14.7 recompilada porque el instalador no reemplaza una versión por otra con el mismo número: comprueba la instalada, dice «already verified» y deja la app que había. La 0.14.8 lleva su marcador de agente (`NVMETRICS_RM_V0148_BOOST_POLICY`), sus copias de respaldo con nombre propio y la actualización desde 0.14.7. Nada de la 0.14.8 se ha compilado ni ejecutado todavía en un Mac: se escribió y se comprobó en Linux, donde no hay compilador de Swift.
 
 ## Reducción de la demora al bajar (0.14.7)
 
@@ -35,7 +43,7 @@ Manual comienza al 50 % y desciende por pasos verificados de 5 % hasta un mínim
 
 No se elevaron los límites: entrada térmica GPU <60 °C, VRAM <84 °C, ≤60 W y utilización ≤20 %; reducción por debajo de 50 % con GPU <58 °C, VRAM <82 °C, ≤50 W y utilización ≤20 %. En Manual, AUTO ante GPU ≥65 °C, VRAM ≥88 °C, >145 W, datos críticos inválidos o pérdida de supervisión. Se mantienen el guard a 250 ms, heartbeat nativo de 6 s, lease del cliente de 8 s y rescate separado. Son políticas experimentales de la aplicación, no límites certificados por el firmware.
 
-Eco modifica el límite de potencia mediante su ruta existente. Reposo guarda la configuración de boost del usuario mediante su ruta existente. Ninguno activa Manual ni cambia la política térmica del controlador de ventiladores. Reposo puede requerir cerrar sesión para afectar procesos ya abiertos.
+Eco modifica el límite de potencia mediante su ruta existente. Reposo guarda la configuración de boost del usuario mediante su ruta existente y, con el driver 3.0.1 o posterior, cambia en la misma petición de contraseña la política de boost del driver (`nvmetrics-agent policy idle|normal`), que las apps ya abiertas siguen en cuanto vuelven a trabajar (una que esté parada con `NVRM_610_BOOST=hold` conserva su petición hasta entonces). Ninguno activa Manual ni cambia la política térmica del controlador de ventiladores. Con un driver anterior, Reposo sigue requiriendo cerrar sesión para afectar procesos ya abiertos. Si el archivo y la política del driver no coinciden (los cambió por separado otra versión de NVMetrics, un cambio a mano o un cambio que el driver rechazó), el interruptor muestra lo que el driver aplica y la ventana lo avisa al abrirse; el driver sigue su política hasta reiniciar.
 
 ## Construcción y pruebas
 
@@ -50,18 +58,18 @@ NVMETRICS_BUILD_PYTHON="$PWD/.build-venv/bin/python" \
   ./build_package.sh sources/NVMetrics sources/nvidia-macos-driver /ruta/nueva/de/salida
 ```
 
-La descarga inicial de encabezados NVIDIA requiere red. Se reutilizan los tags de la base: 610.57.04 con los parches NullMoth incluidos y el diseño RUSD de 620.70.06. `NVMETRICS_BUILD_CACHE` permite indicar otra caché de compilación. El código base fijado conserva sus hashes originales.
+La descarga inicial de encabezados NVIDIA requiere red. Se reutilizan los tags de la base: 610.57.04 con los parches NullMoth incluidos y el diseño RUSD de 620.70.06. `NVMETRICS_BUILD_CACHE` permite indicar otra caché de compilación. El código base fijado conserva sus hashes originales. La copia del driver bajo `sources/nvidia-macos-driver` es la de NullMoth 3.0.1 (commit b80056ef de su rama, todavía sin fusionar): sus parches de NVK llevan la cabecera de la política de boost, que el extractor de `agent/extract_rm_layer.py` saca para que el agente tenga la orden `policy`. El agente así compilado funciona también con el driver 3.0; ahí `policy` responde que el driver no la tiene y Reposo se aplica como antes. Para compilar el paquete hace falta una copia del driver 3.0.1 o posterior (la incluida): con una anterior, `build_package.sh` se detiene tras compilar la app, porque el agente queda sin la cabecera de la política.
 
-`run_tests.sh` ejecuta 101 pruebas Python, 10 suites C, 2 suites Swift y la suite shell de configuración. No escribe controles GPU. Incluye los tests originales de Eco, boost, protección, salud, telemetría y configuración, además de las regresiones nuevas. La compilación ejecuta todas las pruebas, valida el runtime congelado, verifica la firma de la app y comprueba la extracción exacta del paquete final.
+`run_tests.sh` ejecuta 104 pruebas Python, 11 suites C, 3 suites Swift y la suite shell de configuración. No escribe controles GPU. Incluye los tests originales de Eco, boost, protección, salud, telemetría y configuración, además de las regresiones nuevas. La compilación ejecuta todas las pruebas, valida el runtime congelado, verifica la firma de la app y comprueba la extracción exacta del paquete final.
 
 ```sh
 NVMETRICS_BUILD_PYTHON="$PWD/.build-venv/bin/python" \
-  ./verify_package.sh /ruta/NVMetrics-0.14.7-Candidate-Intel.pkg
+  ./verify_package.sh /ruta/NVMetrics-0.14.8-Candidate-Intel.pkg
 ```
 
 ## Validación y límites
 
-Consulta `AUDITORIA-v0147.md` para los resultados reproducibles y los puntos pendientes. Se han leído telemetría y registros RM de la RTX 5050 real, sin SET de ventiladores, boost ni Eco. El diagnóstico `diagnostics/read_only_sensors.c` reutiliza el código C real para contrastar la actualización de las cuatro fuentes; no forma parte del instalador ni se ejecuta en el test automático.
+Consulta `AUDITORIA-v0147.md` para los resultados reproducibles y los puntos pendientes de la 0.14.7; sus medidas son de aquel paquete. Se han leído telemetría y registros RM de la RTX 5050 real, sin SET de ventiladores, boost ni Eco. El diagnóstico `diagnostics/read_only_sensors.c` reutiliza el código C real para contrastar la actualización de las cuatro fuentes; no forma parte del instalador ni se ejecuta en el test automático.
 
 No se ha instalado esta revisión en `/Applications`, reemplazado el helper activo ni probado físicamente su nueva secuencia 30–100 %. Antes de llamarla estable queda ejecutar una instalación/actualización real, un ensayo supervisado en reposo y los casos de salida de aplicación/recuperación sobre esta versión. No se debe asumir recuperación garantizada ante bloqueo de kernel, driver o firmware.
 

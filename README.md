@@ -1,10 +1,12 @@
 # NVMetrics
 
-## Candidato 0.14.7: control manual supervisado
+## Candidato 0.14.8 (instalador publicado: 0.14.7): control manual supervisado
 
-La revisión 0.14.7 está disponible en [`rm-controller/`](rm-controller/README.md), con su base integrada, correcciones de interfaz, supervisión térmica y lector persistente para reducir la demora al bajar ventiladores. Eco y Reposo siguen siendo independientes.
+El código de [`rm-controller/`](rm-controller/README.md) es la 0.14.8 (el instalador publicado es el de la 0.14.7), con su base integrada, correcciones de interfaz, supervisión térmica y lector persistente para reducir la demora al bajar ventiladores. Eco y Reposo siguen siendo independientes.
 
 [Instalador autónomo Intel y SHA-256](packages/0.14.7/README.md) · [Auditoría y validación pendiente](rm-controller/AUDITORIA-v0147.md).
+
+La 0.14.8 añade a la 0.14.7 el Reposo al momento (con el driver NullMoth 3.0.1) y corrige el salto de la selección en el menú de la barra. Todavía no tiene instalador publicado; se compila desde `rm-controller/`.
 
 Es una candidata para RTX 5050 con NullMoth: la nueva secuencia física 100→30 % todavía requiere validación supervisada. El código previo de `agent/` y `app/` se conserva; la documentación que sigue describe esa implementación anterior.
 
