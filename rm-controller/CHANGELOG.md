@@ -1,3 +1,15 @@
+# 0.14.8 — Reposo al momento y menú de la barra (2026-11-16)
+
+**Reposo al momento.** Con el driver NullMoth 3.0.1 o posterior, el interruptor de Reposo escribe el archivo y, en la misma petición de contraseña, cambia la política de boost del driver: las apps ya abiertas dejan de pedir relojes máximos, o vuelven a pedirlos, en cuanto vuelven a trabajar y sin cerrar sesión. Con un driver anterior se comporta como antes. El agente gana la orden `policy [status|idle|normal|undecided]`. La respuesta de las dos órdenes se lee con cualquier fin de línea, porque `do shell script` las devuelve unidas por un retorno de carro. Cuando el archivo y la política no coinciden, el interruptor muestra lo que el driver aplica, la ventana lo avisa al abrirse y el registro de la curva AUTO etiqueta Reposo con ese mismo estado. Si el driver no acepta el cambio de política, la ventana vuelve a leer los dos: el interruptor muestra lo que el driver aplica y, si el archivo y la política no coinciden, avisa de ello (si la política no está decidida, dice que el driver no aceptó el cambio). Cancelar la petición de contraseña ya no quita ese aviso.
+
+**Menú de la barra.** La selección azul ya no salta cuando llega una lectura con el menú abierto: el menú y la cifra de la barra leen una copia de los valores que se queda quieta mientras hay un menú abierto y se pone al día al cerrarlo (`app/MenuHold.swift`, `app/MenuLines.swift`). Con el menú abierto sus cifras no cambian; la ventana sigue en vivo.
+
+**Versión e instalador.** Marcador de agente `NVMETRICS_RM_V0148_BOOST_POLICY`, copias de respaldo propias (`.v0148-package-backup`, `.NVMetrics.app.before-v0148`) y actualización desde 0.14.7; el servicio responde `revision` 0.14.8. Hace falta una versión nueva porque el instalador no reemplaza una 0.14.7 por otra 0.14.7.
+
+**Compilación.** La copia del driver pasa a la 3.0.1 (cuatro parches nuevos de NVK, `build/build_nvk.sh`, `NOTICE` y dos licencias) y la compilación usa `agent/extract_rm_layer.py` de esta revisión, que extrae la cabecera de la política. `build_package.sh` se detiene si el agente queda sin la orden `policy` o sin la cabecera de la política del driver (copia del driver anterior a 3.0.1).
+
+**Pruebas.** Nuevas: `tests/test_policy_cli.c`, `tests/test_menu_hold.swift`, cinco casos en `tests/test_ui_state.swift` y tres en `tests/test_package.py` (actualización desde 0.14.7, agente equivocado bajo un recibo 0.14.7 y que el número de versión es el mismo en instalador, servicio, scripts y agente). En Linux pasan las 104 pruebas Python y las suites C. Nada de Swift se ha compilado y nada de esta versión se ha ejecutado en un Mac; no hay instalador 0.14.8 publicado.
+
 # 0.14.7 — menor demora al bajar (2026-11-16)
 
 Lector RUSD persistente sólo durante Manual, correlación de peticiones y avance independiente de sensores. Conserva todas las pausas y límites de seguridad. Mantiene el destino al rechazar una bajada e informa del valor que la bloqueó. Pruebas de errores, interfaz y migración desde 0.14.6. Medición real del lector documentada en AUDITORIA-v0147.md.

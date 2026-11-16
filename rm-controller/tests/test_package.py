@@ -86,7 +86,7 @@ class TransactionTests(unittest.TestCase):
         self.app=self.d/'Applications'/'NVMetrics.app';self.app.parent.mkdir()
         self.plist=self.d/'Library'/'LaunchDaemons'/'org.nvmetrics.rmguard.plist';self.plist.parent.mkdir()
         self.man=self.root/'.v012-manifest.json';self.receipt=self.root/'.v014-package.json'
-        self.back=self.root/'.v014-package-backup';self.rt=self.root/'Runtime'
+        self.back=self.root/pkg.BACK.name;self.rt=self.root/'Runtime'
         self.payload=self.d/'payload';app=self.payload/'NVMetrics.app';source=self.payload/'service';source.mkdir(parents=True)
         res=app/'Contents/Resources';rt=res/'GuardTools/Runtime';rt.mkdir(parents=True)
         (app/'Contents/Info.plist').write_bytes(plistlib.dumps({'CFBundleIdentifier':'org.nvmetrics.app'}))
@@ -157,7 +157,7 @@ class TransactionTests(unittest.TestCase):
     def simulate_v014(self,version='0.14.0'):
         pkg.install(self.payload,501)
         self.back.rename(self.root/'original-v014-backup')
-        marker={'0.14.0':pkg.LEGACY_MARKER,'0.14.3':pkg.ADAPTIVE_MARKER,'0.14.4':pkg.ADAPTIVE_MARKER,'0.14.5':pkg.ADAPTIVE_MARKER,'0.14.6':pkg.FRESHNESS_MARKER}.get(version,pkg.PREVIOUS_MARKER)
+        marker={'0.14.0':pkg.LEGACY_MARKER,'0.14.3':pkg.ADAPTIVE_MARKER,'0.14.4':pkg.ADAPTIVE_MARKER,'0.14.5':pkg.ADAPTIVE_MARKER,'0.14.6':pkg.FRESHNESS_MARKER,'0.14.7':pkg.SESSION_MARKER}.get(version,pkg.PREVIOUS_MARKER)
         (self.root/'nvmetrics-agent').write_bytes(marker)
         (self.app/'Contents/Resources/nvmetrics-agent').write_bytes(marker)
         (self.rt/'nvmetrics-runtime').write_text('previous frozen runtime')
@@ -175,7 +175,7 @@ class TransactionTests(unittest.TestCase):
         self.assertEqual(pkg.installed_state(501),'same')
         self.assertEqual((self.back/'Runtime/nvmetrics-runtime').read_text(),'previous frozen runtime')
         self.assertTrue((self.root/'original-v014-backup').exists())
-        self.assertTrue((self.app.parent/'.NVMetrics.app.before-v0147').exists())
+        self.assertTrue((self.app.parent/'.NVMetrics.app.before-v0148').exists())
 
     def test_upgrade_from_verified_v0141(self):
         self.simulate_v014('0.14.1')
@@ -213,6 +213,50 @@ class TransactionTests(unittest.TestCase):
         self.assertEqual(pkg.installed_state(501),'upgrade')
         pkg.install(self.payload,501)
         self.assertEqual(pkg.installed_state(501),'same')
+
+    def test_upgrade_from_verified_v0147(self):
+        # What a real 0.14.7 leaves behind after it installed: its own backups, under its own names.
+        self.simulate_v014('0.14.7')
+        old_back=self.root/'.v0147-package-backup';old_back.mkdir()
+        old_app=self.app.parent/'.NVMetrics.app.before-v0147';old_app.mkdir()
+        self.assertEqual(pkg.installed_state(501),'upgrade')
+        pkg.install(self.payload,501)
+        self.assertEqual(pkg.installed_state(501),'same')
+        self.assertEqual(json.loads(self.receipt.read_text())['version'],'0.14.8')
+        self.assertEqual((self.back/'Runtime/nvmetrics-runtime').read_text(),'previous frozen runtime')
+        self.assertIn(pkg.MARKER,(self.root/'nvmetrics-agent').read_bytes())
+        self.assertTrue(old_back.exists());self.assertTrue(old_app.exists())
+
+    def test_v0147_receipt_with_another_agent_is_refused(self):
+        self.simulate_v014('0.14.7')
+        (self.root/'nvmetrics-agent').write_bytes(pkg.FRESHNESS_MARKER)
+        record=json.loads(self.receipt.read_text())
+        record['files']['nvmetrics-agent']=pkg.sha(self.root/'nvmetrics-agent')
+        self.receipt.write_text(json.dumps(record))
+        with self.assertRaisesRegex(RuntimeError,'wrong previous agent'):pkg.installed_state(501)
+
+    def test_one_revision_everywhere(self):
+        # The installer accepts the service only when its ping names this revision, and the package only when its
+        # agent carries this revision's marker: a bump that misses one of these fails every install.
+        here=Path(pkg.__file__).resolve().parent
+        version=pkg.VERSION;marker=pkg.MARKER.decode()
+        self.assertIn("'revision':'%s'"%version,(here/'service'/'server.py').read_text())
+        build=(here/'build_package.sh').read_text()
+        self.assertIn("grep '%s'"%marker,build)
+        self.assertIn("obj['CFBundleShortVersionString']='%s';obj['CFBundleVersion']='%s'"%(version,version),build)
+        self.assertIn('--version %s '%version,build)
+        self.assertIn('NVMetrics-%s-Candidate-Intel.pkg'%version,build)
+        self.assertIn(marker,(here/'agent'/'nvmetrics_agent.c').read_text())
+        for name in ('Verify.command','verify_package.sh'):
+            self.assertIn('NVMetrics-%s-Candidate-Intel.pkg'%version,(here/name).read_text())
+        # the folder the build writes to by default is the one the verifier looks in by default
+        digits=version.replace('.','')
+        for name in ('Build.command','build_package.sh','Verify.command','verify_package.sh'):
+            self.assertIn('NVMetrics-v%s-release'%digits,(here/name).read_text())
+        # each revision keeps its own backups: under a name another revision already used, the upgrade is refused
+        installer=Path(pkg.__file__).read_text()
+        self.assertIn("BACK = ROOT/'.v%s-package-backup'"%digits,installer)
+        self.assertIn("'.NVMetrics.app.before-v%s'"%digits,installer)
 
     def test_upgrade_handshake_failure_restores_runtime_app_and_receipt(self):
         record=self.simulate_v014()
