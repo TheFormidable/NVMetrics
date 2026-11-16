@@ -1,0 +1,23 @@
+#!/bin/bash
+set -euo pipefail
+# The only privileged execution originates from macOS Installer's package
+# scripts directory. Never use an executable from the installed GUI bundle.
+if [[ "${3:-}" != / ]]; then
+  echo 'NVMetrics must be installed on the current startup volume.' >&2
+  exit 1
+fi
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd -P)"
+EXPECTED='@PAYLOAD_SHA256@'
+umask 077
+WORK="$(/usr/bin/mktemp -d /private/var/tmp/nvmetrics-pkg.XXXXXXXX)"
+trap '/bin/rm -rf "$WORK"' EXIT
+# Copy into the private root staging directory before verifying and extracting.
+[[ -f "$SCRIPT_DIR/payload.zip" && ! -L "$SCRIPT_DIR/payload.zip" ]] || exit 1
+/bin/cp "$SCRIPT_DIR/payload.zip" "$WORK/payload.zip"
+ACTUAL="$(/usr/bin/shasum -a 256 "$WORK/payload.zip")"
+[[ "${ACTUAL%% *}" == "$EXPECTED" ]] || { echo 'NVMetrics archive SHA-256 mismatch.' >&2; exit 1; }
+/usr/bin/ditto -x -k "$WORK/payload.zip" "$WORK/extracted"
+PAYLOAD="$WORK/extracted/payload"
+RUNTIME="$PAYLOAD/NVMetrics.app/Contents/Resources/GuardTools/Runtime/nvmetrics-runtime"
+/usr/bin/codesign --verify --deep --strict "$PAYLOAD/NVMetrics.app"
+/usr/bin/env -i PATH=/usr/bin:/bin:/usr/sbin:/sbin HOME=/var/root LANG=C "$RUNTIME" install "$PAYLOAD"

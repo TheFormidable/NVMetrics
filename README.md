@@ -1,5 +1,13 @@
 # NVMetrics
 
+## Candidato 0.14.7: control manual supervisado
+
+La revisión 0.14.7 está disponible en [`rm-controller/`](rm-controller/README.md), con su base integrada, correcciones de interfaz, supervisión térmica y lector persistente para reducir la demora al bajar ventiladores. Eco y Reposo siguen siendo independientes.
+
+[Instalador autónomo Intel y SHA-256](packages/0.14.7/README.md) · [Auditoría y validación pendiente](rm-controller/AUDITORIA-v0147.md).
+
+Es una candidata para RTX 5050 con NullMoth: la nueva secuencia física 100→30 % todavía requiere validación supervisada. El código previo de `agent/` y `app/` se conserva; la documentación que sigue describe esa implementación anterior.
+
 Monitor de la gráfica para el driver [NullMoth](https://github.com/TheFormidable/nvidia-macos-driver) en macOS: un icono en la barra de menús con la temperatura y una ventana con
 relojes, consumo, temperaturas, ventilador, VRAM, los controles que el driver de verdad permite, avisos cuando la tarjeta se
 calienta y, con el driver 3.0, su salud. Sigue el modo claro u oscuro de macOS.

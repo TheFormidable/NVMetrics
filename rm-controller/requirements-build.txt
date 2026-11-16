@@ -1,0 +1,2 @@
+# Build machine only. The resulting installer bundles the interpreter.
+PyInstaller==6.22.3
