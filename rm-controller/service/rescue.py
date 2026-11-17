@@ -44,10 +44,10 @@ def supervise(pulse_fd,parent_pid,guard_pid,deadline,clock=time.monotonic,timeou
     service calls do not get an unlimited period to hold MANUAL.
     """
     last=clock()
-    while clock()<deadline:
+    while deadline is None or clock()<deadline:
         if os.getppid()!=parent_pid:return 'parent_disappeared'
         if not guard_exists(guard_pid):return 'guard_exited'
-        remaining=min(0.5,max(0.,deadline-clock()))
+        remaining=0.5 if deadline is None else min(0.5,max(0.,deadline-clock()))
         ready,_,_=select.select([pulse_fd],[],[],remaining)
         if ready:
             data=os.read(pulse_fd,4096)
@@ -65,7 +65,7 @@ def main():
     ap.add_argument('--parent-pid',type=int,required=True)
     ap.add_argument('--guard-pid',type=int,required=True)
     args=ap.parse_args()
-    if (os.geteuid()!=0 or not 10<=args.delay<=28830 or args.parent_pid<2 or
+    if (os.geteuid()!=0 or not (args.delay==0 or 10<=args.delay<=28830) or args.parent_pid<2 or
         args.guard_pid<2 or min(args.write_fd,args.pulse_fd,args.lease_fd)<3):
         raise SystemExit('invalid_privileged_rescue')
     if os.getppid()!=args.parent_pid:raise SystemExit('parent_pid_mismatch')
@@ -88,7 +88,7 @@ def main():
             os.write(fd,(json.dumps({'t':time.time(),**fields},separators=(',',':'))+'\n').encode('utf8'))
         event(event='armed',pid=os.getpid(),delay_s=args.delay,watchdog_s=MAX_SILENCE)
         os.write(args.write_fd,b'ARMED\n');os.close(args.write_fd)
-        reason=supervise(args.pulse_fd,args.parent_pid,args.guard_pid,time.monotonic()+args.delay)
+        reason=supervise(args.pulse_fd,args.parent_pid,args.guard_pid,None if args.delay==0 else time.monotonic()+args.delay)
         event(event='wake',reason=reason,guard_pid=args.guard_pid)
         os.close(args.pulse_fd)
         # The C guard might itself have just received EOF and be returning to AUTO.

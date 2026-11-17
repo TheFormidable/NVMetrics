@@ -1,6 +1,15 @@
 # NVMetrics
 
-## Candidato 0.14.8 (instalador publicado: 0.14.7): control manual supervisado
+## Candidato 0.15.0 — GPU Caps fases 1, 2C y 3
+
+La implementación activa está en [`rm-controller/`](rm-controller/README.md). El candidato Intel fue compilado, instalado y abierto correctamente en macOS 26.7.3 con una RTX 5050 y el driver GPU Caps fase 2B. La monitorización descubre canales disponibles sin depender del nombre comercial. Esto no amplía la autorización de escritura de ventiladores.
+
+- [Arquitectura, evidencia, compatibilidad y límites actuales](rm-controller/GPU-CAPS.md).
+- [Construcción y validación](LEEME-GPU-CAPS.md) · [Cambios](rm-controller/CHANGELOG.md) · [Seguridad](SECURITY.md).
+- Manual conserva los pasos de 5 puntos porcentuales, mínimo de 30% y protecciones existentes.
+- El instalador público anterior sigue siendo 0.14.7. El candidato 0.15.0 no es una publicación estable ni una certificación de todas las GPU.
+
+## Historial: candidato 0.14.8 y código anterior
 
 El código de [`rm-controller/`](rm-controller/README.md) es la 0.14.8 (el instalador publicado es el de la 0.14.7), con su base integrada, correcciones de interfaz, supervisión térmica y lector persistente para reducir la demora al bajar ventiladores. Eco y Reposo siguen siendo independientes.
 

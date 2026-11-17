@@ -61,9 +61,9 @@ class IPCServer:
         try:
             req=decode_request(payload);op=req['op']
             if op=='ping':
-                return {'ok':True,'service':'NVMetrics RM v0.14.9','writes_enabled':self.physical.enabled,
+                return {'ok':True,'service':'NVMetrics RM v0.15.0','writes_enabled':self.physical.enabled,
                         'authorized_uid':self.allowed_uid,'sequential_sessions':True,'physical_one_shot':False,
-                        'revision':'0.14.9','manual_floor':50 if self.physical.load_profile else 30,
+                        'revision':'0.15.0','manual_floor':50 if self.physical.load_profile else 30,
                         'safety_profile':self.physical.safety_profile}
             if op in ('status','inspect'):
                 return {'ok':True,'operation':op,'data':self.backend.call(op,progress=self.physical.guard_progress) if self.physical.token else self.backend.call(op)}
@@ -121,7 +121,7 @@ class IPCServer:
         if s.get('fresh') is not True:return 'stale'
         if any(type(s.get(k)) not in (float,int) or not math.isfinite(s[k]) for k in ('gpu_c','mem_c','power_w')):return 'telemetry_invalid'
         if not 0<s['gpu_c']<(65 if load or thermal else 55) or not 0<s['mem_c']<(88 if load or thermal else 82):return 'thermal_limit' if thermal and s['gpu_c']>0 and s['mem_c']>0 else 'thermal_or_power'
-        if not 0<=s['power_w']<=(145 if load or thermal else 35):return 'thermal_or_power'
+        if not 0<=s['power_w']<=(1000 if getattr(self.physical,'continuous',False) else 145 if load or thermal else 35):return 'thermal_or_power'
         if not load and (type(s.get('util_gpu_pct')) is not int or not 0<=s['util_gpu_pct']<=(100 if thermal else 20)):return 'utilization_invalid' if thermal else 'idle_utilization_limit'
         rpm=s.get('rpm')
         if rpm==[]:return 'tachometer_missing'
@@ -220,11 +220,11 @@ class IPCServer:
                 print(f'IPC READY socket={self.path} uid={self.allowed_uid} '+
                       f'lifetime={seconds}s physical={"ARMED" if self.physical.enabled else "DISABLED"} safety_profile={self.physical.safety_profile} sequential-sessions',flush=True)
                 last_client_activity=time.monotonic()
-                limit=time.monotonic()+seconds
+                limit=time.monotonic()+seconds if seconds else None
                 self.service_deadline=limit
                 if hasattr(self.physical,'service_deadline'):self.physical.service_deadline=limit
                 try:
-                    while not self.stop and time.monotonic()<limit:
+                    while not self.stop and (limit is None or time.monotonic()<limit):
                         self.physical._poll_child()
                         if hasattr(self.physical,'check_client_lease'):self.physical.check_client_lease()
                         if hasattr(self.physical,'watchdog_tick'):self.physical.watchdog_tick()
@@ -258,22 +258,33 @@ def main():
     ap.add_argument('--uid',type=int,required=True)
     ap.add_argument('--launchd-socket',action='store_true')
     ap.add_argument('--lifetime',type=int,default=3600)
+    ap.add_argument('--continuous',action='store_true')
     ap.add_argument('--enable-physical',action='store_true',help='Allow sequential 50%-100% sessions with independently verified AUTO between sessions')
     profiles=ap.add_mutually_exclusive_group()
     profiles.add_argument('--load-test',action='store_true',help='Explicitly allow GPU workloads only after 50% tachometers are confirmed')
     profiles.add_argument('--thermal-supervised',action='store_true',help='Thermal supervised profile with 30% minimum')
     ap.add_argument('--acknowledge',default='',help='Must be RM_V08_EXPERIMENT for physical mode')
     args=ap.parse_args()
-    if os.geteuid()!=0 or args.uid<1 or not 90<=args.lifetime<=28800:
+    if os.geteuid()!=0 or args.uid<1 or not (90<=args.lifetime<=28800 or args.continuous and args.lifetime==0):
         ap.error('root, non-root client UID and 90..28800s lifetime required')
     if (args.load_test or args.thermal_supervised) and not args.enable_physical:
         ap.error('--load-test requires --enable-physical')
+    if args.continuous and (not args.thermal_supervised or args.lifetime!=0):
+        ap.error('continuous requires thermal supervision and lifetime 0')
     expected_ack='RM_V10_LOAD_TEST' if args.load_test else ('RM_V08_EXPERIMENT' if args.enable_physical else '')
     if args.acknowledge!=expected_ack:
         ap.error('explicit acknowledgment required: '+(expected_ack or 'none'))
     for name in FILES:verified_root_path(ROOT/name,executable=name=='nvmetrics-agent')
     os.umask(0o077)
-    physical=Physical(ROOT/'nvmetrics-agent',enabled=args.enable_physical,load_profile=args.load_test,thermal_profile=args.thermal_supervised)
+    if args.continuous:
+        # Requalify after reboot or hardware changes. The installer is not
+        # a permanent authorization for a different GPU or cooler layout.
+        from package_install import qualified_gpu,inspect_auto
+        try:
+            qualified_gpu();inspect_auto(ROOT/'nvmetrics-agent',qualified=True)
+        except (RuntimeError,ValueError,OSError):
+            args.enable_physical=False
+    physical=Physical(ROOT/'nvmetrics-agent',enabled=args.enable_physical,load_profile=args.load_test,thermal_profile=args.thermal_supervised,continuous=args.continuous)
     srv=IPCServer(ROOT/'control.sock',args.uid,ReadOnlyAgent(ROOT/'nvmetrics-agent'),physical)
     def stop(sig,frame):srv.stop=True
     signal.signal(signal.SIGTERM,stop);signal.signal(signal.SIGINT,stop)

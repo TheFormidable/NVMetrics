@@ -53,6 +53,10 @@ static inline uint64_t nvm_guard_sensor_age(struct nvm_guard_clock *s,
 }
 static int nvm_guard_load_profile = 0;
 static int nvm_guard_thermal_profile = 0;
+static int nvm_guard_continuous = 0;
+static inline int nvm_guard_elapsed_ok(uint64_t now,uint64_t began){
+    return now>=began && (nvm_guard_continuous || now-began<NVM_GUARD_HARD_MS);
+}
 struct nvm_guard_sample {
     double gpu_c, mem_c, watts;
     int util_pct, fan_fresh;
@@ -76,14 +80,14 @@ static inline int nvm_guard_ok_sample(struct nvm_guard_sample s, int starting) {
         isfinite(s.watts) && s.gpu_c>0 && s.mem_c>0 && s.watts>=0 &&
         s.gpu_c < (starting ? NVM_GUARD_IDLE_GPU_C : NVM_GUARD_ACTIVE_GPU_C) &&
         s.mem_c < (starting ? NVM_GUARD_IDLE_MEM_C : NVM_GUARD_ACTIVE_MEM_C) &&
-        s.watts <= (starting || !(nvm_guard_load_profile || nvm_guard_thermal_profile) ? 35.0 : NVM_GUARD_LOAD_MAX_W) &&
-        s.util_pct>=0 && s.util_pct <= (starting || !(nvm_guard_load_profile || nvm_guard_thermal_profile) ? 20 : 100);
+        s.watts <= (nvm_guard_continuous ? 1000.0 : starting || !(nvm_guard_load_profile || nvm_guard_thermal_profile) ? 35.0 : NVM_GUARD_LOAD_MAX_W) &&
+        s.util_pct>=0 && s.util_pct <= (nvm_guard_continuous ? 100 : starting || !(nvm_guard_load_profile || nvm_guard_thermal_profile) ? 20 : 100);
 }
 static inline int nvm_guard_thermal_entry(struct nvm_guard_sample s, int low){
     return s.fan_fresh && isfinite(s.gpu_c) && isfinite(s.mem_c) && isfinite(s.watts) &&
         s.gpu_c>0 && s.gpu_c<(low?NVM_GUARD_LOW_GPU_C:NVM_GUARD_ENTRY_GPU_C) &&
         s.mem_c>0 && s.mem_c<(low?NVM_GUARD_LOW_MEM_C:NVM_GUARD_ENTRY_MEM_C) &&
-        s.watts>=0 && s.watts<=(low?NVM_GUARD_LOW_W:NVM_GUARD_ENTRY_W) && s.util_pct>=0 && s.util_pct<=20;
+        s.watts>=0 && s.watts<=(nvm_guard_continuous?1000.0:low?NVM_GUARD_LOW_W:NVM_GUARD_ENTRY_W) && s.util_pct>=0 && s.util_pct<=(nvm_guard_continuous?100:20);
 }
 static inline int nvm_guard_entry_ok(struct nvm_guard_sample s){
     return nvm_guard_thermal_profile ? nvm_guard_thermal_entry(s,0) : nvm_guard_ok_sample(s,1);
@@ -95,7 +99,7 @@ static inline int nvm_guard_start(struct nvm_guard_state *s, struct nvm_guard_sa
 }
 static inline int nvm_guard_raise(struct nvm_guard_state *s, unsigned pct, uint64_t now){
     if (!s || !s->active || pct<=s->percent || pct>100 || pct%5u || pct<NVM_GUARD_UNCALIBRATED_FLOOR ||
-        now<s->began_ms || now-s->began_ms>=NVM_GUARD_HARD_MS) return 0;
+        !nvm_guard_elapsed_ok(now,s->began_ms)) return 0;
     s->percent=pct; return 1;
 }
 /* Only one downward 5-percent step from 50% or lower, with safe idle sample.
@@ -106,7 +110,7 @@ static inline int nvm_guard_can_lower(const struct nvm_guard_state *s,
     return s && s->active && !nvm_guard_load_profile && (s->percent<=50 || nvm_guard_thermal_profile) &&
         s->percent>=NVM_GUARD_UNCALIBRATED_FLOOR+5u &&
         pct>=NVM_GUARD_UNCALIBRATED_FLOOR && pct+5u==s->percent &&
-        now>=s->began_ms && now-s->began_ms<NVM_GUARD_HARD_MS &&
+        nvm_guard_elapsed_ok(now,s->began_ms) &&
         (nvm_guard_thermal_profile && pct<50 ? nvm_guard_thermal_entry(sample,1) :
          nvm_guard_ok_sample(sample,!(nvm_guard_thermal_profile && pct>=50)));
 }
@@ -118,7 +122,7 @@ static inline int nvm_guard_lower(struct nvm_guard_state *s,
 }
 static inline int nvm_guard_ping(struct nvm_guard_state *s, uint64_t now){
     if (!s || !s->active || now<s->heartbeat_ms || now<s->began_ms ||
-        now-s->began_ms>=NVM_GUARD_HARD_MS ||
+        !nvm_guard_elapsed_ok(now,s->began_ms) ||
         now-s->heartbeat_ms>=NVM_GUARD_HEARTBEAT_MS) return 0;
     s->heartbeat_ms=now; return 1;
 }
@@ -131,7 +135,7 @@ static inline int nvm_guard_ping(struct nvm_guard_state *s, uint64_t now){
 static inline int nvm_guard_must_restore(struct nvm_guard_state *s,
     struct nvm_guard_sample v, uint64_t now){
     if(!s || !s->active) return 0;
-    if(now<s->began_ms || now-s->began_ms>=NVM_GUARD_HARD_MS ||
+    if(!nvm_guard_elapsed_ok(now,s->began_ms) ||
        now<s->heartbeat_ms || now-s->heartbeat_ms>=NVM_GUARD_HEARTBEAT_MS)
         return 1;
     if(s->percent<NVM_GUARD_UNCALIBRATED_FLOOR || s->percent>100u ||

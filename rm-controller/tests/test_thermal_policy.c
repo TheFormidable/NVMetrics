@@ -44,6 +44,18 @@ int main(void){
     assert(nvm_guard_ping(&s,5000));
     assert(nvm_guard_must_restore(&s,(struct nvm_guard_sample){60,82,45,55,1},5000));
     assert(s.thermal_trend_trip);
+    nvm_guard_continuous=1;
+    struct nvm_guard_state continuous={0};
+    struct nvm_guard_sample heavy={45,70,250,100,1};
+    assert(nvm_guard_start(&continuous,heavy,1000));
+    assert(nvm_guard_lower(&continuous,heavy,45,1200));
+    uint64_t late=UINT64_C(30000000);
+    continuous.heartbeat_ms=late-100;
+    assert(nvm_guard_ping(&continuous,late));
+    assert(!nvm_guard_must_restore(&continuous,heavy,late+100));
+    assert(nvm_guard_must_restore(&continuous,heavy,late+6000));
+    assert(nvm_guard_must_restore(&continuous,(struct nvm_guard_sample){65,70,250,100,1},late+100));
+    assert(nvm_guard_must_restore(&continuous,(struct nvm_guard_sample){45,70,250,100,0},late+100));
     puts("PASS thermal supervisor: real 21% regression, load, floor, trend, sensors and watchdog");
     return 0;
 }

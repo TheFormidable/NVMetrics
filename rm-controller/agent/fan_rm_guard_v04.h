@@ -188,7 +188,7 @@ static struct nvm_guard_sample nvm_v04_sample(NV00DE_SHARED_DATA *live,
 static int nvm_v0134_time_ok(const struct nvm_guard_state *s,uint64_t begin,uint64_t t)
 {
     return t>=begin && t-begin<=10 &&
-        t>=s->began_ms && t-s->began_ms<NVM_GUARD_HARD_MS &&
+        nvm_guard_elapsed_ok(t,s->began_ms) &&
         t>=s->heartbeat_ms && t-s->heartbeat_ms<NVM_GUARD_HEARTBEAT_MS;
 }
 static struct nvm_guard_sample nvm_v0134_active_sample(NV00DE_SHARED_DATA *live,
@@ -275,7 +275,8 @@ static const char *nvm_v09_trigger(const struct nvm_guard_state *state,
     if (s.gpu_c>=NVM_GUARD_ACTIVE_GPU_C) return "gpu_temperature_limit";
     if (s.mem_c>=NVM_GUARD_ACTIVE_MEM_C) return "memory_temperature_limit";
     if (state->thermal_trend_trip) return "thermal_rise_near_limit";
-    if (s.watts>((nvm_guard_load_profile || nvm_guard_thermal_profile) ? NVM_GUARD_LOAD_MAX_W : 35.0))
+    if (nvm_guard_continuous && s.watts>1000.0) return "power_sensor_implausible";
+    if (!nvm_guard_continuous && s.watts>((nvm_guard_load_profile || nvm_guard_thermal_profile) ? NVM_GUARD_LOAD_MAX_W : 35.0))
         return (nvm_guard_load_profile || nvm_guard_thermal_profile) ? "power_limit_145w" : "power_limit_35w";
     if (s.util_pct==-1 && nvm_guard_load_profile && state->util_gap_active &&
         now>=state->util_gap_since_ms &&
@@ -287,7 +288,7 @@ static const char *nvm_v09_trigger(const struct nvm_guard_state *state,
     if (now<state->heartbeat_ms) return "clock_anomaly";
     if (now-state->heartbeat_ms>=NVM_GUARD_HEARTBEAT_MS) return "heartbeat_timeout";
     if (now<state->began_ms) return "clock_anomaly";
-    if (now-state->began_ms>=NVM_GUARD_HARD_MS) return "session_deadline";
+    if (!nvm_guard_elapsed_ok(now,state->began_ms)) return "session_deadline";
     if (state->percent<NVM_GUARD_UNCALIBRATED_FLOOR || state->percent>100u ||
         state->percent%5u || (nvm_guard_load_profile && state->percent<50u)) return "manual_floor_violation";
     return "unclassified_guard_trip";
@@ -355,9 +356,11 @@ static int nvm_v04_guard_cli(void)
     nvm_guard_load_profile=(profile && !strcmp(profile,"USER_AUTHORIZED_V10")) ? 1 : 0;
     const char *thermal=getenv("NVMETRICS_RM_THERMAL_SUPERVISOR");
     nvm_guard_thermal_profile=(!nvm_guard_load_profile && thermal && !strcmp(thermal,"USER_AUTHORIZED_V0141"));
+    const char *continuous=getenv("NVMETRICS_RM_CONTINUOUS");
+    nvm_guard_continuous=nvm_guard_thermal_profile && continuous && !strcmp(continuous,"USER_AUTHORIZED_V0150");
     fprintf(stderr,"fan guard: control profile=%s max_gpu=65C max_mem=88C ",
         nvm_guard_thermal_profile?"thermal_supervised":nvm_guard_load_profile?"attended_load_test":"idle_only");
-    fprintf(stderr,"power_limit=%.0fW\n",(nvm_guard_load_profile || nvm_guard_thermal_profile)?NVM_GUARD_LOAD_MAX_W:35.0);
+    fprintf(stderr,"power_sensor_ceiling=%.0fW continuous=%d\n",nvm_guard_continuous?1000.0:(nvm_guard_load_profile || nvm_guard_thermal_profile)?NVM_GUARD_LOAD_MAX_W:35.0,nvm_guard_continuous);
     /* SIGPIPE default in main would terminate on dead GUI before restoring. */
     signal(SIGPIPE,SIG_IGN);
     /* Single active root helper; exclusive lock held for the entire process. */

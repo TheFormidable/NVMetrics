@@ -10,6 +10,11 @@ Manual fan control requires a verified AUTO baseline, valid telemetry, two
 tachometers, a guarded written/read-back transaction and independent rescue.
 If AUTO cannot be verified, stop further manual operation and investigate locally.
 
+GPU Caps and RUSD discovery are read-only. Observed channels, successful GETs,
+firmware fingerprints and verified telemetry do not grant manual write access.
+Unknown capabilities remain unknown; do not bypass existing qualification,
+thermal limits, watchdog, read-back checks or independent AUTO recovery.
+
 The current Unix socket authenticates kernel peer UID, not app identity. A process
 running as the authorized desktop user is within this trust boundary. Signed XPC
 with code-signing requirements, Developer ID signing/notarization, hardware ABI

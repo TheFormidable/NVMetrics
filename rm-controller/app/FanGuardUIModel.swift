@@ -12,6 +12,7 @@ final class FanGuardUIModel: ObservableObject {
     @Published private(set) var physicalEnabled = false
     @Published private(set) var loadProfile = false
     @Published private(set) var thermalProfile = false
+    @Published private(set) var continuousProfile = false
     @Published private(set) var active = false
     @Published private(set) var oneShotUsed = false
     @Published private(set) var currentPercent = 0
@@ -86,6 +87,7 @@ final class FanGuardUIModel: ObservableObject {
         physicalEnabled = (data["physical_enabled"] as? Bool) == true
         loadProfile = (data["safety_profile"] as? String) == "attended_load_test"
         thermalProfile = (data["safety_profile"] as? String) == "thermal_supervised"
+        continuousProfile = (data["unlimited_session"] as? Bool) == true
         manualFloor = loadProfile ? 50 : 30
         if !runningSelection { targetPercent = manualFloor }
         if (data["manual_floor"] as? Int) != manualFloor { physicalEnabled = false }
@@ -106,7 +108,8 @@ final class FanGuardUIModel: ObservableObject {
             let reported = data["percent"] as? Int ?? 0
             readbackConfirmed = (data["readback_verified"] as? Bool) == true && reported >= manualFloor && reported <= 100 && reported % 5 == 0
             if readbackConfirmed { currentPercent = reported }
-            rmStatus = "Manual \(currentPercent) % · \(thermalProfile ? "Supervisor térmico" : loadProfile ? "Carga supervisada" : "Sólo inactividad") · \(Int(secondsLeft.rounded(.up))) s restantes"
+            let duration = (data["unlimited_session"] as? Bool) == true ? "sin límite temporal" : "\(Int(secondsLeft.rounded(.up))) s restantes"
+            rmStatus = "Manual \(currentPercent) % · \(thermalProfile ? "Supervisor térmico" : loadProfile ? "Carga supervisada" : "Sólo inactividad") · \(duration)"
             if !readbackConfirmed { rmStatus = "Manual · porcentaje RM sin confirmar" }
         } else {
             pulse?.cancel();pulse = nil;session = nil

@@ -1,3 +1,11 @@
+# 0.15.0 — Manual continuo (candidato de prueba local)
+
+- Perfil continuo explícito: sin vencimiento de sesión ni de servicio; el guard C, watchdog del cliente y rescate independiente siguen activos. Se mantiene el mínimo de 30%, inicio a 50%, lectura RM y comprobación de tacómetros.
+- Carga hasta 100% admitida; el consumo no es un límite de utilización, solo se rechazan valores inválidos o superiores a 1000 W como techo de plausibilidad. Mantiene límites térmicos conservadores y margen adicional al reducir por debajo de 50%.
+- GPU no cualificada: instalación nueva con control de ventiladores de solo lectura. No implica soporte universal de escritura ni telemetría garantizada. La ruta física sigue restringida a la plataforma RTX 5050 y layout conocidos.
+- GPU Caps fase 1: lectura de ABI versionada del driver. Fase 2C: descubrimiento de canales observados mediante RUSD. Fase 3: perfil incluido en telemetría y presentación dinámica de slots en SwiftUI, con compatibilidad con agentes anteriores.
+- Validación nativa reportada el 17-11-2026: paquete Intel compilado e instalado, aplicación funcionando con RTX 5050 y driver fase 2B. No equivale a validación física de todo el rango manual, Fan Stop, otros modelos o todas las versiones de macOS. [Evidencia y límites](GPU-CAPS.md).
+
 # 0.14.9 — Endurecimiento de auditoría (candidato)
 
 - Límite absoluto de lectura IPC y timeout de respuesta; una conexión lenta no renueva el plazo.

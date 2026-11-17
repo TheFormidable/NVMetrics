@@ -6,6 +6,10 @@ sys.path.insert(0,str(ROOT/'service'))
 import rescue,physical
 
 class RescueWatchdog(unittest.TestCase):
+ def test_continuous_rescue_still_times_out_on_silence(self):
+  r,w=os.pipe()
+  try:self.assertEqual(rescue.supervise(r,os.getppid(),os.getpid(),None,timeout=.15),'server_pulse_timeout')
+  finally:os.close(r);os.close(w)
  def test_server_stall_triggers_recovery_without_8h_wait(self):
   r,w=os.pipe()
   try:

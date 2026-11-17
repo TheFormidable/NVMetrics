@@ -1,12 +1,16 @@
-# NVMetrics 0.14.9 — candidato de endurecimiento para Intel
+# NVMetrics 0.15.0 — candidato de Manual continuo para Intel
+
+**GPU Caps integrado (fases 1, 2C y 3).** Compilación e instalación confirmadas por el usuario el 17 de noviembre de 2026 en macOS 26.7.3 Intel. El driver fase 2B aporta capacidades cacheadas; el agente descubre canales RUSD y la GUI muestra los slots realmente observados. Véase [GPU-CAPS.md](GPU-CAPS.md). La lectura no autoriza escritura y no se han cambiado los pasos de 5%.
+
+Para compilar localmente en macOS Intel, abre `Build.command` desde este directorio. El candidato permite carga y elimina vencimientos de Manual solo bajo supervisión continua. Sigue siendo experimental, con límites térmicos de GPU/VRAM, validación RM, dos tacómetros y rescate independiente. Otras GPU se instalan sin escritura de ventiladores; no se afirma compatibilidad física universal. No publicar como estable hasta verificar el paquete y el hardware.
 
 La revisión 0.14.9 conserva Manual/AUTO, Eco y Reposo en caliente. Limita Manual a una hora y añade controles de seguridad IPC, rutas privilegiadas fijas y rotación de auditoría. Es experimental: no se ha validado físicamente ni firmado/notarizado para distribución pública. Véase `CHANGELOG.md` y `../SECURITY.md`.
 
-Continuación de `NVMetrics-RM-v0145-complete-source.zip`. **No es todavía una versión certificada como estable en control físico.** Se conserva la base integrada bajo `sources/` y se aplican las correcciones de esta revisión durante la compilación en una copia temporal. Esta entrega se incorpora bajo `rm-controller/` para preservar la implementación previa de la raíz del repositorio. El instalador publicado, en [`packages/0.14.7/`](../packages/0.14.7/), es el de la 0.14.7; la 0.14.8 de este código (Reposo al momento y menú de la barra, más abajo) todavía no tiene instalador publicado y se compila con los pasos de «Construcción y pruebas».
+Continuación de `NVMetrics-RM-v0145-complete-source.zip`. **No es todavía una versión certificada como estable en control físico.** Se conserva la base integrada bajo `sources/` y se aplican las correcciones de esta revisión durante la compilación en una copia temporal. Esta entrega se incorpora bajo `rm-controller/` para preservar la implementación previa de la raíz del repositorio. El instalador público anterior está en [`packages/0.14.7/`](../packages/0.14.7/); 0.15.0 se construye localmente con los pasos documentados en [LEEME-GPU-CAPS](../LEEME-GPU-CAPS.md).
 
 ## Resultado
 
-- Instalador autónomo `NVMetrics-0.14.8-Candidate-Intel.pkg`, para macOS x86_64, mínimo declarado macOS 14. Se instala sobre la 0.14.7 y las anteriores que el instalador ya aceptaba.
+- Instalador candidato `NVMetrics-0.15.0-Candidate-Intel.pkg`, para macOS x86_64, mínimo declarado macOS 14 (GPU Caps probado en 26.7.3).
 - Aplicación SwiftUI, agente C y servicio/rescate/cliente Python congelados con PyInstaller 6.22.3. El usuario final no necesita Python, Homebrew, Xcode ni descargar paquetes.
 - Se requiere el driver NullMoth compatible, ya instalado. Este paquete no instala ni modifica el driver.
 - Se mantiene la restricción de la base a una sola RTX 5050 y al diseño RM observado de dos ventiladores, con candidatos de límites RPM 1150/3700. No se amplía a otros modelos.
@@ -66,7 +70,7 @@ La descarga inicial de encabezados NVIDIA requiere red. Se reutilizan los tags d
 
 ```sh
 NVMETRICS_BUILD_PYTHON="$PWD/.build-venv/bin/python" \
-  ./verify_package.sh /ruta/NVMetrics-0.14.8-Candidate-Intel.pkg
+  ./verify_package.sh /ruta/NVMetrics-0.15.0-Candidate-Intel.pkg
 ```
 
 ## Validación y límites
