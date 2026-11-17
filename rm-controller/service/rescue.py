@@ -80,6 +80,10 @@ def main():
         st=os.fstat(fd)
         if not stat.S_ISREG(st.st_mode) or st.st_uid!=0 or st.st_nlink!=1 or st.st_mode&0o077:
             raise RuntimeError('untrusted_rescue_log')
+        if st.st_size>=4*1024*1024:
+            os.replace(log,log.with_suffix('.jsonl.1'))
+            os.close(fd);fd=-1
+            fd=os.open(log,flags|os.O_EXCL,0o600)
         def event(**fields):
             os.write(fd,(json.dumps({'t':time.time(),**fields},separators=(',',':'))+'\n').encode('utf8'))
         event(event='armed',pid=os.getpid(),delay_s=args.delay,watchdog_s=MAX_SILENCE)
@@ -103,7 +107,7 @@ def main():
         event(event='complete',verified_auto=verified,inspect_rc=code,reason=reason,stderr=err)
         return 0 if verified else 4
     finally:
-        os.close(fd)
+        if fd>=0:os.close(fd)
         os.close(args.lease_fd)
 
 if __name__=='__main__':

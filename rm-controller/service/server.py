@@ -34,9 +34,14 @@ def verified_root_path(path:Path,executable=False):
             if executable and not st.st_mode&0o100:raise RuntimeError('agent_not_executable')
         elif not stat.S_ISDIR(st.st_mode):raise RuntimeError('ancestor_not_directory')
 
-def read_frame(conn):
+def read_frame(conn, timeout=1.0):
+    # Absolute deadline, not a renewed timeout for every byte.
+    deadline=time.monotonic()+timeout
     buf=b''
     while len(buf)<=MAX_REQUEST_BYTES and b'\n' not in buf:
+        remaining=deadline-time.monotonic()
+        if remaining<=0:raise TimeoutError('request_deadline')
+        conn.settimeout(remaining)
         c=conn.recv(min(256,MAX_REQUEST_BYTES+1-len(buf)))
         if not c:break
         buf+=c
@@ -56,9 +61,9 @@ class IPCServer:
         try:
             req=decode_request(payload);op=req['op']
             if op=='ping':
-                return {'ok':True,'service':'NVMetrics RM v0.14.8','writes_enabled':self.physical.enabled,
+                return {'ok':True,'service':'NVMetrics RM v0.14.9','writes_enabled':self.physical.enabled,
                         'authorized_uid':self.allowed_uid,'sequential_sessions':True,'physical_one_shot':False,
-                        'revision':'0.14.8','manual_floor':50 if self.physical.load_profile else 30,
+                        'revision':'0.14.9','manual_floor':50 if self.physical.load_profile else 30,
                         'safety_profile':self.physical.safety_profile}
             if op in ('status','inspect'):
                 return {'ok':True,'operation':op,'data':self.backend.call(op,progress=self.physical.guard_progress) if self.physical.token else self.backend.call(op)}
@@ -171,12 +176,14 @@ class IPCServer:
         self.physical.stop('load_health_trip_'+reason)
 
     def handle(self,conn):
-        conn.settimeout(14)
+        conn.settimeout(1.0)
         try:
             uid=self.peer_identity(conn)
             data=self.dispatch(read_frame(conn),uid) if uid==self.allowed_uid else {'ok':False,'error':'unauthorized_peer'}
         except (OSError,TimeoutError):data={'ok':False,'error':'transport_error'}
-        try:conn.sendall(response(data))
+        try:
+            conn.settimeout(1.0)
+            conn.sendall(response(data))
         except (OSError,TimeoutError):pass
     def serve(self,seconds,socket_uid=None,launchd_listener=None):
         lock=self.path.with_suffix('.lock')

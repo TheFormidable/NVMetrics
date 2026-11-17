@@ -1,0 +1,19 @@
+name: RM controller hardware-free checks
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  portable:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Python regression suites
+        env:
+          PYTHONPATH: rm-controller/service:rm-controller/client:rm-controller
+        run: python3 -B -m unittest discover -s rm-controller/tests -v
+  macos:
+    runs-on: macos-15-intel
+    steps:
+      - uses: actions/checkout@v4
+      - name: Native hardware-free suites
+        run: bash rm-controller/run_tests.sh

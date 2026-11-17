@@ -24,6 +24,14 @@ die() { echo "nvmetrics-setting: $*" >&2; exit 2; }
 case $cmd in status|on|off) ;; *) die "usage: nvmetrics-setting.sh reposo status|on|off [conf]";; esac
 
 fstat() { if [ "$(uname)" = Darwin ]; then stat -f "$1" "$2"; else stat -c "$3" "$2"; fi; }   # GNU stat only for the Linux test
+if [ "$cmd" != status ] && [ "$CONF" = /Library/GPUBundles/nvmtl/nvrm610.conf ]; then
+    for dir in /Library /Library/GPUBundles /Library/GPUBundles/nvmtl; do
+        [ -d "$dir" ] && [ ! -L "$dir" ] || die "unsafe configuration ancestor: $dir"
+        [ "$(fstat %u "$dir" %u)" = 0 ] || die "non-root configuration ancestor: $dir"
+        mode=$(fstat %Lp "$dir" %a)
+        [ $(( 0$mode & 022 )) -eq 0 ] || die "writable configuration ancestor: $dir"
+    done
+fi
 [ -e "$CONF" ] || die "$CONF does not exist (is the driver installed?)"
 [ ! -L "$CONF" ] && [ -f "$CONF" ] || die "$CONF is not a regular file; refused"
 [ "$(fstat %u "$CONF" %u)" = "$OWNER" ] || die "$CONF is not owned by root; refused"
