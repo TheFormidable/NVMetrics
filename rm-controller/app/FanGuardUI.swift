@@ -94,7 +94,7 @@ struct FanGuardCard: View {
                     }
                 }
             }
-            Text(fanGuard.thermalProfile ? "Objetivo inicial 30 %. Arranque verificado al 50 %: GPU <60 °C, VRAM <84 °C, ≤60 W. Bajar de 50 %: GPU <58 °C, VRAM <82 °C, ≤50 W y uso ≤20 %. AUTO ante límites térmicos o fallo. No pruebes juegos a baja velocidad todavía." : fanGuard.loadProfile ? "Carga supervisada: Manual 50–100 %. Las reducciones no están habilitadas." : "Sólo inactividad: mínimo 30 %, ambos ventiladores ≥1000 RPM. Nunca uses <50 % jugando.")
+            Text(fanGuard.continuousProfile ? "Manual continuo 30–100 %. Admite carga con telemetría válida; arranque al 50 % y margen térmico obligatorio para reducir. AUTO ante límites térmicos, tacómetros inválidos o pérdida de supervisión. Prueba presencial." : fanGuard.thermalProfile ? "Objetivo inicial 30 %. Arranque verificado al 50 %: GPU <60 °C, VRAM <84 °C, ≤60 W. Bajar de 50 %: GPU <58 °C, VRAM <82 °C, ≤50 W y uso ≤20 %. AUTO ante límites térmicos o fallo. No pruebes juegos a baja velocidad todavía." : fanGuard.loadProfile ? "Carga supervisada: Manual 50–100 %. Las reducciones no están habilitadas." : "Sólo inactividad: mínimo 30 %, ambos ventiladores ≥1000 RPM. Nunca uses <50 % jugando.")
                 .font(.system(size: 11)).foregroundStyle(th.label).fixedSize(horizontal: false, vertical: true)
             if let text = fanGuard.message {
                 Text(text).font(.system(size: 11)).foregroundStyle(th.label)

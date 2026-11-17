@@ -57,6 +57,7 @@
 #include "fan_preview.h"
 #include "fan_runtime.h"
 #include "policy_cli.h"
+#include "gpu_caps_cli.h"
 /* the driver's boost policy (3.0.1 on): extract_rm_layer.py copies the header only from a driver whose NVK patches
    carry it, and then nvrm_xnu.c has nvrm_xnu_boost_policy */
 #if defined(__has_include)
@@ -70,6 +71,7 @@ _Static_assert(POL_V_UNDECIDED == NVRM_BP_UNDECIDED && POL_V_IDLE == NVRM_BP_IDL
 
 static struct NvRmApi rm;
 static NvHandle hClient, hDevice, hSub;
+static NvU32 active_gpu_id;
 
 static int rm_up(unsigned gpu)
 {
@@ -82,6 +84,7 @@ static int rm_up(unsigned gpu)
     if (nvRmApiControl(&rm, hClient, NV0000_CTRL_CMD_GPU_GET_ATTACHED_IDS, &ids, sizeof ids) != NV_OK ||
         gpu >= NV0000_CTRL_GPU_MAX_ATTACHED_GPUS || ids.gpuIds[gpu] == NV0000_CTRL_GPU_INVALID_ID) { fprintf(stderr, "nvmetrics-agent: no GPU %u\n", gpu); return -1; }
     NV0000_CTRL_GPU_GET_ID_INFO_V2_PARAMS info = { .gpuId = ids.gpuIds[gpu] };
+    active_gpu_id = ids.gpuIds[gpu];
     if (nvRmApiControl(&rm, hClient, NV0000_CTRL_CMD_GPU_GET_ID_INFO_V2, &info, sizeof info) != NV_OK) { fprintf(stderr, "nvmetrics-agent: no id info\n"); return -1; }
     NV0080_ALLOC_PARAMETERS dp = { .deviceId = info.deviceInstance, .hClientShare = hClient };
     NV2080_ALLOC_PARAMETERS sp = { .subDeviceId = info.subDeviceInstance };
@@ -125,6 +128,33 @@ static void rusd_snapshot(NV00DE_SHARED_DATA *live, NV00DE_SHARED_DATA *s)
     RUSD_READ_DATA(live, fanCoolerStatus, &s->fanCoolerStatus);
 }
 
+/* Report observations, not permissions. Zero RPM does not identify an absent
+ * cooler, and observed extrema must not become firmware limits. */
+static int caps_live(int argc)
+{
+    if (argc != 2) return 2;
+    if (rm_up(0)) return 3;
+    NV00DE_SHARED_DATA *live = rusd_map();
+    if (!live) return 3;
+    uint32_t tach = 0, thermal = 0, power = 0;
+    for (unsigned i = 0; i < 8; ++i) {
+        static NV00DE_SHARED_DATA s;
+        usleep(250000);
+        rusd_snapshot(live, &s);
+        if (s.fanCoolerStatus.lastModifiedTimestamp)
+            for (unsigned j = 0; j < RUSD_FAN_COOLER_MAX_COOLERS; ++j)
+                if (s.fanCoolerStatus.info.rpmCurr[j]) tach |= 1u << j;
+        for (unsigned j = 0; j < RUSD_TEMPERATURE_TYPE_MAX; ++j)
+            if (s.temperatures[j].lastModifiedTimestamp) thermal |= 1u << j;
+        if (s.powerLimitGpu.lastModifiedTimestamp) power |= 1u;
+        if (s.avgPowerUsage.lastModifiedTimestamp) power |= 2u;
+        if (s.instPowerUsage.lastModifiedTimestamp) power |= 4u;
+    }
+    printf("{\"gpu_id\":%u,\"source\":\"RUSD\",\"tach_slot_mask\":%u,\"thermal_target_mask\":%u,\"power_read_mask\":%u,\"manual_authorized\":false,\"cooler_count\":null,\"fan_stop\":null}\n",
+           (unsigned)active_gpu_id, tach, thermal, power);
+    return 0;
+}
+
 static unsigned long long now_ms(void)
 {
     struct timeval tv; gettimeofday(&tv, NULL);
@@ -150,7 +180,7 @@ static int policy_cli(int argc, char **argv)
         /* the second line is this revision's marker, which the package installer and build_package.sh look for in
            the agent they are about to install (package_install.py MARKER): 0.14.8 is the first with "policy" */
         fprintf(stderr, "usage: nvmetrics-agent policy [status|idle|normal|undecided]\n"
-                        "NVMETRICS_RM_V0149_AUDIT_HARDENING\n");
+                        "NVMETRICS_RM_V0150_CONTINUOUS\n");
         return 2;
     }
     if (c != POL_STATUS && geteuid() != 0) { fprintf(stderr, "nvmetrics-agent: policy idle/normal/undecided needs root\n"); return 2; }
@@ -333,6 +363,19 @@ static void sample_line(const NV00DE_SHARED_DATA *snap, int control)
     health_read(&h);
     nvm_json_open(snap, now_ms(), stdout);
     nvm_fan_append_live(snap);
+    /* Session-scoped observations, never a physical count or write capability. */
+    static uint32_t tach_seen;
+    uint32_t thermal = 0, power = 0;
+    if (nvm_ok(snap->fanCoolerStatus.lastModifiedTimestamp))
+        for (unsigned i = 0; i < RUSD_FAN_COOLER_MAX_COOLERS; ++i)
+            if (snap->fanCoolerStatus.info.rpmCurr[i]) tach_seen |= 1u << i;
+    for (unsigned i = 0; i < RUSD_TEMPERATURE_TYPE_MAX; ++i)
+        if (nvm_ok(snap->temperatures[i].lastModifiedTimestamp)) thermal |= 1u << i;
+    if (nvm_ok(snap->powerLimitGpu.lastModifiedTimestamp)) power |= 1u;
+    if (nvm_ok(snap->avgPowerUsage.lastModifiedTimestamp)) power |= 2u;
+    if (nvm_ok(snap->instPowerUsage.lastModifiedTimestamp)) power |= 4u;
+    fprintf(stdout, ",\"gpu_profile\":{\"gpu_id\":%u,\"tach_slot_mask\":%u,\"thermal_target_mask\":%u,\"power_read_mask\":%u}",
+            (unsigned)active_gpu_id, tach_seen, thermal, power);
     fputc(',', stdout); nvm_health_json(&h, stdout);
     if (control) { fputc(',', stdout); boost_json(stdout); fputc(',', stdout); nvm_protect_json(&bc.prot, stdout); }
     nvm_json_close(stdout);
@@ -445,6 +488,8 @@ int main(int argc, char **argv)
 {
     const char *cmd = argc > 1 ? argv[1] : "once";
     signal(SIGPIPE, SIG_DFL);   /* the app closing our stdout ends the watch */
+    if (!strcmp(cmd, "caps")) return nvm_caps_cli(argc);
+    if (!strcmp(cmd, "caps-live")) return caps_live(argc);
     if (!strcmp(cmd, "fan")) return nvm_fan_cli(argc, argv);
     if (!strcmp(cmd, "eco")) {
         enum eco_cmd c = eco_parse(argc > 2 ? argv[2] : NULL);
@@ -467,7 +512,7 @@ int main(int argc, char **argv)
     }
     int watch = !strcmp(cmd, "watch"), control = 0;
     if (!watch && strcmp(cmd, "once")) {
-        fprintf(stderr, "usage: nvmetrics-agent watch [ms] [--control] | once | eco [status|on|off] | boost hold | policy [status|idle|normal|undecided]\n");
+        fprintf(stderr, "usage: nvmetrics-agent watch [ms] [--control] | once | caps | eco [status|on|off] | boost hold | policy [status|idle|normal|undecided]\n");
         return 2;
     }
     long ms = 1000;

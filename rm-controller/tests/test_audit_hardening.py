@@ -46,3 +46,17 @@ class AuditHardeningTests(unittest.TestCase):
         p=physical.Physical(Path('/fake'));p.token='token';p.start_time=time.monotonic()-3601
         with patch.object(p,'_poll_child'),patch.object(p,'stop') as stop:
             p.check_client_lease();stop.assert_called_once_with('hard_deadline')
+
+    def test_continuous_session_preserves_client_watchdog(self):
+        p=physical.Physical(Path('/fake'),thermal_profile=True,continuous=True)
+        p.token='token';p.start_time=time.monotonic()-90000;p.last_heartbeat=time.monotonic()
+        with patch.object(p,'_poll_child'),patch.object(p,'stop') as stop,patch.object(p,'_audit'):
+            p.check_client_lease();stop.assert_not_called()
+            p.last_heartbeat-=9;p.check_client_lease();stop.assert_called_once_with('client_lease_expired')
+
+    def test_continuous_preflight_under_load(self):
+        sample={'fresh':True,'gpu_c':45,'mem_c':70,'power_w':250,'util_gpu_pct':100,'rpm':[1200,1200]}
+        self.assertTrue(physical.Physical.idle_ok(sample,{'mode':'auto'},True,continuous=True))
+        self.assertTrue(physical.Physical._low_idle_ok(sample,30,False,True,continuous=True))
+        sample['mem_c']=88
+        self.assertFalse(physical.Physical.idle_ok(sample,{'mode':'auto'},True,continuous=True))

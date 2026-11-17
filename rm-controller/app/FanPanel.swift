@@ -12,11 +12,11 @@ struct FanCard: View {
         let th = Theme(scheme: scheme)
         let sample = agent.latest
         let measured = sample?.fan_rpm
-        let observedThisSample = sample?.fan_live?.fan_count_observed ?? 0
-        let count = min(max(agent.previouslyObservedFanCount, observedThisSample, measured?.count ?? 0), 8)
+        let profile = sample?.gpu_profile
+        let slots = profile?.tachSlots ?? (measured ?? []).indices.filter { (measured?[$0] ?? 0) > 0 && $0 < 16 }
         return Card(icon: "fanblades.fill", title: "Ventiladores") {
-            if count > 0 {
-                ForEach(0..<count, id: \.self) { i in
+            if !slots.isEmpty {
+                ForEach(slots, id: \.self) { i in
                     let rpm: Int? = measured.map { i < $0.count ? $0[i] : 0 }
                     InfoLine(name: "Ventilador \(i + 1)",
                              value: rpm.map { $0 == 0 ? "0 RPM · parado" : "\($0) RPM" } ?? "--")
@@ -28,7 +28,11 @@ struct FanCard: View {
                 InfoLine(name: "RPM", value: "0 · sin recuento conocido")
             }
             InfoLine(name: "VRAM", value: vram(sample))
-            Text("\(count > 0 ? "Hasta \(count) ventilador(es) observados anteriormente." : "Cantidad física no enumerada.") El recuento se infiere de RPM positivas; no de una consulta al firmware.")
+            if let profile {
+                InfoLine(name: "Sensores", value: profile.thermalNames.isEmpty ? "--" : profile.thermalNames.joined(separator: ", "))
+                InfoLine(name: "Potencia", value: profile.powerNames.isEmpty ? "--" : profile.powerNames.joined(separator: ", "))
+            }
+            Text("\(slots.count) canales de tacómetro observados en esta sesión. La cantidad física no está confirmada por el firmware.")
                 .font(.system(size: 10)).foregroundStyle(th.label)
                 .fixedSize(horizontal: false, vertical: true)
             Text(fanGuard.active ? "Control manual supervisado · consulta el estado RM." : fanGuard.autoVerified ? "Control automático del firmware verificado." : "Control RM: consulta la confirmación de AUTO.")

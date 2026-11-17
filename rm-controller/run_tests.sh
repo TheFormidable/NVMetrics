@@ -21,6 +21,8 @@ xcrun swiftc -module-cache-path "$T/modules" -swift-version 5 -parse-as-library 
 # The menu-bar item's values stand still while a menu is open (the highlight must not jump when a reading arrives).
 xcrun swiftc -module-cache-path "$T/modules" -swift-version 5 -parse-as-library "$HERE/app/MenuHold.swift" "$HERE/tests/test_menu_hold.swift" -o "$T/test_menu"
 "$T/test_menu"
+xcrun swiftc -module-cache-path "$T/modules" -swift-version 5 -parse-as-library "$HERE/app/Sample.swift" "$HERE/tests/test_gpu_profile.swift" -o "$T/test_gpu_profile"
+"$T/test_gpu_profile"
 # Run the original C/shell suites against the exact bundled base and patched
 # NVIDIA headers. Copy into a temporary checkout to preserve bundled sources.
 /usr/bin/ditto "$HERE/sources/NVMetrics" "$T/base"

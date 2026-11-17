@@ -25,6 +25,12 @@ class PackagingTests(unittest.TestCase):
         self.assertIn('RM_V08_EXPERIMENT',d['ProgramArguments'])
         self.assertFalse(d['RunAtLoad'])
         self.assertEqual(d['Sockets']['Listener']['SockPathName'],str(pkg.ROOT/'control.sock'))
+        self.assertIn('--continuous',d['ProgramArguments'])
+
+    def test_unqualified_gpu_read_only_daemon(self):
+        d=plistlib.loads(pkg.launch_plist(501,False))
+        for flag in ('--continuous','--enable-physical','--thermal-supervised'):
+            self.assertNotIn(flag,d['ProgramArguments'])
 
     def test_frozen_rescue_is_independent_process(self):
         p=physical.Physical(Path('/fake/agent'))
@@ -175,7 +181,7 @@ class TransactionTests(unittest.TestCase):
         self.assertEqual(pkg.installed_state(501),'same')
         self.assertEqual((self.back/'Runtime/nvmetrics-runtime').read_text(),'previous frozen runtime')
         self.assertTrue((self.root/'original-v014-backup').exists())
-        self.assertTrue((self.app.parent/'.NVMetrics.app.before-v0149').exists())
+        self.assertTrue((self.app.parent/'.NVMetrics.app.before-v0150').exists())
 
     def test_upgrade_from_verified_v0141(self):
         self.simulate_v014('0.14.1')
@@ -222,7 +228,7 @@ class TransactionTests(unittest.TestCase):
         self.assertEqual(pkg.installed_state(501),'upgrade')
         pkg.install(self.payload,501)
         self.assertEqual(pkg.installed_state(501),'same')
-        self.assertEqual(json.loads(self.receipt.read_text())['version'],'0.14.9')
+        self.assertEqual(json.loads(self.receipt.read_text())['version'],'0.15.0')
         self.assertEqual((self.back/'Runtime/nvmetrics-runtime').read_text(),'previous frozen runtime')
         self.assertIn(pkg.MARKER,(self.root/'nvmetrics-agent').read_bytes())
         self.assertTrue(old_back.exists());self.assertTrue(old_app.exists())

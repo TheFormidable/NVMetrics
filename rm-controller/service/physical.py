@@ -31,11 +31,12 @@ class PhysicalError(ValueError):
 
 
 class Physical:
-    def __init__(self,agent:Path,enabled:bool=False,rescue_module:Path|None=None,lease_path:Path=LEASE,load_profile:bool=False,thermal_profile:bool=False):
+    def __init__(self,agent:Path,enabled:bool=False,rescue_module:Path|None=None,lease_path:Path=LEASE,load_profile:bool=False,thermal_profile:bool=False,continuous:bool=False):
         self.agent=agent
         self.enabled=enabled
         self.load_profile=bool(load_profile)
         self.thermal_profile=bool(thermal_profile) and not self.load_profile
+        self.continuous=bool(continuous) and self.thermal_profile
         self.rescue_module=rescue_module or ROOT/'rescue.py'
         self.lease_path=lease_path
         self.guard=None
@@ -135,7 +136,7 @@ class Physical:
         if self.token and self.service_deadline is not None:
             left=min(left,max(0.,self.service_deadline-time.monotonic()))
         return {'active':self.token is not None,'mode':'manual' if self.token else 'auto_or_unverified',
-                'percent':self.pct,'seconds_left':round(left,1),'physical_enabled':self.enabled,
+                'percent':self.pct,'seconds_left':None if self.continuous and self.token else round(left,1),'unlimited_session':self.continuous,'physical_enabled':self.enabled,
                 'safety_profile':self.safety_profile,
                 'one_shot_used':self.used,'rearm_pending':self.used and (self._recoverable_tach() or self._recoverable_thermal() or self._recoverable_heartbeat() or (not self.failure and self.last_end=='user_auto_verified')),
                 'last_end_reason':self.last_end,
@@ -256,16 +257,16 @@ class Physical:
         self._audit('rescue_verified_auto_rearmed',previous_trip=self.last_trip,automatic_recovery=recoverable)
 
     @staticmethod
-    def idle_ok(s,rm,thermal=False,low=False):
+    def idle_ok(s,rm,thermal=False,low=False,continuous=False):
         import math
         try:
             gpu=s['gpu_c'];mem=s['mem_c'];power=s['power_w'];util=s['util_gpu_pct']
             g,m,w=(58,82,50) if thermal and low else (60,84,60) if thermal else (55,82,35)
-            return rm['mode']=='auto' and s['fresh'] is True and all(type(v) in (int,float) and math.isfinite(v) for v in (gpu,mem,power)) and type(util) is int and 0<gpu<g and 0<mem<m and 0<=power<=w and 0<=util<=20
+            return rm['mode']=='auto' and s['fresh'] is True and all(type(v) in (int,float) and math.isfinite(v) for v in (gpu,mem,power)) and type(util) is int and 0<gpu<g and 0<mem<m and 0<=power<=(1000 if continuous else w) and 0<=util<=(100 if continuous else 20)
         except (KeyError,TypeError):return False
 
     @staticmethod
-    def preflight_rejection(s,rm,thermal=False):
+    def preflight_rejection(s,rm,thermal=False,continuous=False):
         # Specific, safe-to-display rejection codes for the original Mac GUI.
         # This function never authorizes manual control; idle_ok is authoritative.
         import math
@@ -278,12 +279,13 @@ class Physical:
                     return 'preflight_'+key+'_invalid'
             gpu,mem,power=s['gpu_c'],s['mem_c'],s['power_w']
             g,m,w=(60,84,60) if thermal else (55,82,35)
+            if continuous:w=1000
             if not 0<gpu<g:return f'preflight_gpu_temperature_not_below_{g}C'
             if not 0<mem<m:return f'preflight_memory_temperature_not_below_{m}C'
             if not 0<=power<=w:return f'preflight_power_above_{w}W'
             util=s.get('util_gpu_pct')
-            if type(util) is not int or not 0<=util<=20:
-                return 'preflight_utilization_above_20pct_or_unavailable'
+            if type(util) is not int or not 0<=util<=(100 if continuous else 20):
+                return 'preflight_utilization_invalid' if continuous else 'preflight_utilization_above_20pct_or_unavailable'
         except (TypeError,ValueError,AttributeError):pass
         return 'preflight_not_idle_or_auto'
 
@@ -369,6 +371,7 @@ class Physical:
         try:
             remaining=max(20.,(self.service_deadline-time.monotonic())+10.) if self.service_deadline else RESCUE_DELAY_SECONDS
             remaining=min(RESCUE_DELAY_SECONDS,remaining)
+            if self.continuous and self.service_deadline is None:remaining=0
             proc=subprocess.Popen(self.rescue_command()+[
                                    '--write-fd',str(ack_write),'--lease-fd',str(self.lease_fd),
                                    '--pulse-fd',str(pulse_read),
@@ -408,7 +411,7 @@ class Physical:
                 self._send('PING',None)
                 s=probe()
                 rpm=s.get('rpm')
-                if (self.idle_ok(s,{'mode':'auto'},self.thermal_profile) and type(rpm) is list and len(rpm)==2 and
+                if (self.idle_ok(s,{'mode':'auto'},self.thermal_profile,continuous=self.continuous) and type(rpm) is list and len(rpm)==2 and
                     all(type(n) is int and 950<=n<=5500 for n in rpm[:2]) and
                     self.guard.poll() is None):
                     self._send('PING',None)
@@ -422,12 +425,17 @@ class Physical:
 
     def begin(self,uid,status,inspect,probe=None):
         if not self.enabled:raise PhysicalError('physical_mode_disabled')
+        if self.continuous and any((r.get('rpm_min_candidate'),r.get('rpm_max_candidate'))!=(1150,3700)
+                                   for name in ('regular','default') for r in inspect.get(name,[])):
+            raise PhysicalError('unqualified_cooler_layout')
+        if self.continuous and any(len(inspect.get(name,[]))!=2 for name in ('regular','default')):
+            raise PhysicalError('unqualified_cooler_layout')
         self._poll_child()
         if self.used or self.token:
             if self.last_end=='user_auto_verified' or self._recoverable_tach() or self._recoverable_thermal() or self._recoverable_heartbeat():raise PhysicalError('previous_rescue_still_verifying_AUTO')
             raise PhysicalError('previous_session_or_rescue_not_safe_to_rearm')
-        if not self.idle_ok(status,inspect,self.thermal_profile):
-            reason=self.preflight_rejection(status,inspect,self.thermal_profile)
+        if not self.idle_ok(status,inspect,self.thermal_profile,continuous=self.continuous):
+            reason=self.preflight_rejection(status,inspect,self.thermal_profile,self.continuous)
             self._audit('manual_begin_refused',reason=reason,
                         gpu_c=status.get('gpu_c'),mem_c=status.get('mem_c'),
                         power_w=status.get('power_w'),util_pct=status.get('util_gpu_pct'))
@@ -460,6 +468,7 @@ class Physical:
                                         env={'PATH':'/usr/bin:/bin','HOME':'/var/root','LANG':'C',
                                              'NVMETRICS_FAN_GUARD':'ACEPTO_GUARD_V04',
                                              **({'NVMETRICS_RM_THERMAL_SUPERVISOR':'USER_AUTHORIZED_V0141'} if self.thermal_profile else {}),
+                                             **({'NVMETRICS_RM_CONTINUOUS':'USER_AUTHORIZED_V0150'} if self.continuous else {}),
                                              **({'NVMETRICS_RM_LOAD_TEST':'USER_AUTHORIZED_V10'} if self.load_profile else {})})
             ev=self._read_event(6)
             if ev.get('event')!='ready':raise PhysicalError('guard_not_ready')
@@ -487,7 +496,7 @@ class Physical:
         self._poll_child()
         if not self.token or not secrets.compare_digest(self.token,token):
             raise PhysicalError('invalid_or_expired_session')
-        if time.monotonic()-self.start_time>=MAX_MANUAL_SECONDS:
+        if not self.continuous and time.monotonic()-self.start_time>=MAX_MANUAL_SECONDS:
             self.stop('hard_deadline');raise PhysicalError('session_expired')
 
     def heartbeat(self,uid,token):
@@ -552,14 +561,14 @@ class Physical:
         # envelope. The native C guard repeats the strict preflight itself.
         if self.thermal_profile and pct<50:
             for _ in range(2):
-                if self._low_idle_ok(initial,self.pct,False,True) or not self._soft_lower_excursion(initial,self.pct,True):break
+                if self._low_idle_ok(initial,self.pct,False,True,continuous=self.continuous) or not self._soft_lower_excursion(initial,self.pct,True):break
                 self._audit('manual_lower_preflight_retry',requested=pct,percent=self.pct,sample=initial)
                 time.sleep(.45)
                 self.heartbeat(uid,token)
                 initial=probe()
-        if not self._low_idle_ok(initial,self.pct,active_thermal,self.thermal_profile):
+        if not self._low_idle_ok(initial,self.pct,active_thermal,self.thermal_profile,continuous=self.continuous):
             self._audit('manual_lower_refused',requested=pct,percent=self.pct,reason='lower_preflight',sample=initial)
-            if self.thermal_profile and pct<50 and self._low_idle_ok(initial,self.pct,True,True):
+            if self.thermal_profile and pct<50 and self._low_idle_ok(initial,self.pct,True,True,continuous=self.continuous):
                 raise PhysicalError('lower_thermal_margin_insufficient_no_write',sample=initial,requested=pct,applied=self.pct)
             if self.thermal_profile:
                 # The existing active step was NOT shown to be safe either.
@@ -588,7 +597,7 @@ class Physical:
                 self.last_heartbeat=time.monotonic()
                 sample=probe()
                 rpm=sample.get('rpm')
-                if self._low_idle_ok(sample,pct,active_thermal,self.thermal_profile):
+                if self._low_idle_ok(sample,pct,active_thermal,self.thermal_profile,continuous=self.continuous):
                     samples.append(rpm[:2])
                     if len(samples)==3:break
                 elif self.thermal_profile and pct<50 and self._soft_lower_excursion(sample,pct,True):
@@ -598,7 +607,7 @@ class Physical:
                     samples.clear();break
                 else:raise PhysicalError('low_calibration_tach_or_idle_failed')
             if len(samples)!=3:
-                if self.thermal_profile and pct<50 and self._low_idle_ok(sample,pct,True,True) and sample['gpu_c']<58 and sample['mem_c']<82:
+                if self.thermal_profile and pct<50 and self._low_idle_ok(sample,pct,True,True,continuous=self.continuous) and sample['gpu_c']<58 and sample['mem_c']<82:
                     self._recover_lower(uid,token,previous,pct,probe)
                     raise PhysicalError('lower_recovered_verified_higher',sample=sample,requested=pct,applied=self.pct)
                 raise PhysicalError('low_calibration_tach_or_idle_failed')
@@ -619,7 +628,7 @@ class Physical:
                 try:
                     self.heartbeat(uid,token)
                     sample=probe()
-                    safe=self._low_idle_ok(sample,previous,True,True)
+                    safe=self._low_idle_ok(sample,previous,True,True,continuous=self.continuous)
                 except (PhysicalError,OSError,ValueError,KeyError,TypeError):safe=False
                 if safe:raise PhysicalError('lower_thermal_margin_insufficient_no_write',sample=sample,requested=pct,applied=self.pct) from None
             self._audit('manual_lower_failed',previous=previous,requested=pct,reason=str(exc),
@@ -653,7 +662,7 @@ class Physical:
             time.sleep(.45)
             self.heartbeat(uid,token)
             current=probe()
-            if not self._low_idle_ok(current,recovery,True,True):
+            if not self._low_idle_ok(current,recovery,True,True,continuous=self.continuous):
                 raise PhysicalError('lower_recovery_tach_or_health_failed')
             samples.append(current['rpm'][:2])
         self.heartbeat(uid,token)
@@ -661,7 +670,7 @@ class Physical:
         self._audit('manual_lower_recovered',attempted=attempted,percent=recovery,rpm_samples=samples,rm_verified=True,rm_transaction=self.last_rm_transaction)
 
     @staticmethod
-    def _low_idle_ok(s,pct=30,active_thermal=False,thermal=False):
+    def _low_idle_ok(s,pct=30,active_thermal=False,thermal=False,continuous=False):
         import math
         if pct<MANUAL_FLOOR:return False
         try:
@@ -670,8 +679,8 @@ class Physical:
                 all(type(n) is int and rpm_floor(pct)<=n<=5500 for n in rpm[:2]) and
                 all(type(s.get(k)) in (int,float) and math.isfinite(s[k])
                     for k in ('gpu_c','mem_c','power_w')) and
-                0<s['gpu_c']<(65 if active_thermal else 58 if thermal else 55) and 0<s['mem_c']<(88 if active_thermal else 82) and 0<=s['power_w']<=(145 if active_thermal else 50 if thermal else 35) and
-                type(s.get('util_gpu_pct')) is int and 0<=s['util_gpu_pct']<=(100 if active_thermal else 20))
+                0<s['gpu_c']<(65 if active_thermal else 58 if thermal else 55) and 0<s['mem_c']<(88 if active_thermal else 82) and 0<=s['power_w']<=(1000 if continuous else 145 if active_thermal else 50 if thermal else 35) and
+                type(s.get('util_gpu_pct')) is int and 0<=s['util_gpu_pct']<=(100 if continuous or active_thermal else 20))
         except (KeyError,TypeError,ValueError):return False
 
     def check_client_lease(self,deadline_seconds=8.0):
@@ -681,7 +690,7 @@ class Physical:
         this lease makes the parent-side intent explicit and auditable.
         """
         self._poll_child()
-        if self.token and time.monotonic()-self.start_time>=MAX_MANUAL_SECONDS:
+        if self.token and not self.continuous and time.monotonic()-self.start_time>=MAX_MANUAL_SECONDS:
             self.stop('hard_deadline')
             return
         if self.token and self.last_heartbeat and time.monotonic()-self.last_heartbeat>deadline_seconds:

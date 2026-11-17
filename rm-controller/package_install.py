@@ -21,12 +21,12 @@ import time
 import install_v012 as base
 from protocol import parse_agent
 
-VERSION = '0.14.9'
+VERSION = '0.15.0'
 ROOT = base.ROOT
 APP = Path('/Applications/NVMetrics.app')
 RUNTIME = ROOT/'Runtime'
 RECEIPT = ROOT/'.v014-package.json'
-BACK = ROOT/'.v0149-package-backup'
+BACK = ROOT/'.v0150-package-backup'
 FILES = ('server.py','backend.py','peer.py','physical.py','rescue.py','protocol.py','launchd_socket.py','nvmetrics-agent','nvmetrics-setting.sh')
 LEGACY = {
     'server.py':'aa833add4bd6377672441802fce5d38d9226862a98ca1b272e9e22e99378d64b',
@@ -37,7 +37,8 @@ LEGACY = {
     'protocol.py':'0b385a66267e1fec6f781b29c57e1fab0556b8bdaf3a5c6d8590b10f9527643e',
     'launchd_socket.py':'3f5645aaf924af8536586772a68c8e671418ad9b6797d2744233a38fdaaf8bf5',
 }
-MARKER = b'NVMETRICS_RM_V0149_AUDIT_HARDENING'
+MARKER = b'NVMETRICS_RM_V0150_CONTINUOUS'
+V0149_MARKER = b'NVMETRICS_RM_V0149_AUDIT_HARDENING'
 V0148_MARKER = b'NVMETRICS_RM_V0148_BOOST_POLICY'
 SESSION_MARKER = b'NVMETRICS_RM_V0147_SESSION_READER'
 FRESHNESS_MARKER = b'NVMETRICS_RM_V0146_SENSOR_FRESHNESS'
@@ -111,14 +112,16 @@ def qualified_gpu():
     displays=json.loads(result.stdout).get('SPDisplaysDataType',[])
     names=[str(d.get('sppci_model','')) for d in displays if isinstance(d,dict)]
     # No claim of multi-GPU routing or general compatibility.
-    if len(displays)!=1 or len(names)!=1 or 'rtx 5050' not in names[0].casefold():
+    if len(displays)!=1 or len(names)!=1 or names[0].strip().casefold() not in ('nvidia geforce rtx 5050','geforce rtx 5050'):
         raise RuntimeError('Only the single RTX 5050 validation platform is supported by this package')
 
 
-def launch_plist(uid):
+def launch_plist(uid,qualified=True):
     d=plistlib.loads(base.daemon_plist(uid,'idle'))
-    d['ProgramArguments']=[str(RUNTIME/'nvmetrics-runtime'),'server','--uid',str(uid),'--lifetime','28800',
+    d['ProgramArguments']=[str(RUNTIME/'nvmetrics-runtime'),'server','--uid',str(uid),'--lifetime','0','--continuous',
                            '--enable-physical','--thermal-supervised','--acknowledge','RM_V08_EXPERIMENT','--launchd-socket']
+    if not qualified:
+        d['ProgramArguments']=[str(RUNTIME/'nvmetrics-runtime'),'server','--uid',str(uid),'--lifetime','28800','--launchd-socket']
     return plistlib.dumps(d,sort_keys=True)
 
 
@@ -158,7 +161,7 @@ def start_job():
     raise RuntimeError('launchd registration unsuccessful')
 
 
-def verify_client(uid):
+def verify_client(uid,qualified=True):
     """Test real on-demand startup as the authorized non-root desktop UID."""
     client=APP/'Contents/Resources/GuardTools/Runtime/nvmetrics-runtime'
     prefix=['/usr/bin/sudo','-n','-u',f'#{uid}','--',client,'client']
@@ -166,6 +169,7 @@ def verify_client(uid):
         try:
             ping=run(prefix+['ping'],15)
             status=json.loads(ping.stdout) if ping.returncode==0 else {}
+            if not qualified and status.get('ok') is True and status.get('revision')==VERSION and status.get('authorized_uid')==uid and status.get('writes_enabled') is False:return
             if (status.get('ok') is True and status.get('revision')==VERSION and
                 status.get('authorized_uid')==uid and status.get('writes_enabled') is True and
                 status.get('manual_floor')==30 and status.get('safety_profile')=='thermal_supervised'):
@@ -181,19 +185,19 @@ def installed_state(uid):
     if RECEIPT.exists():
         base.safe_file(RECEIPT)
         record=json.loads(RECEIPT.read_text())
-        if record.get('version') not in ('0.14.0','0.14.1','0.14.2','0.14.3','0.14.4','0.14.5','0.14.6','0.14.7','0.14.8',VERSION) or record.get('uid')!=uid:
+        if record.get('version') not in ('0.14.0','0.14.1','0.14.2','0.14.3','0.14.4','0.14.5','0.14.6','0.14.7','0.14.8','0.14.9',VERSION) or record.get('uid')!=uid:
             raise RuntimeError('different installed package/authorized user')
         base.safe_file(base.PLIST)
         if sha(base.PLIST)!=record['plist'] or tree_digest(RUNTIME)!=record['runtime'] or tree_digest(APP)!=record['app']:
             raise RuntimeError('installed package differs; do not overwrite')
         for n in FILES:
-            if n=='nvmetrics-setting.sh' and record.get('version')!=VERSION:continue
+            if n=='nvmetrics-setting.sh' and record.get('version') not in ('0.14.9',VERSION):continue
             base.safe_file(ROOT/n)
             if sha(ROOT/n)!=record['files'][n]: raise RuntimeError('installed file changed:'+n)
         if record.get('version')==VERSION:return 'same'
-        expected_marker = {'0.14.0':LEGACY_MARKER,'0.14.3':ADAPTIVE_MARKER,'0.14.4':ADAPTIVE_MARKER,'0.14.5':ADAPTIVE_MARKER,'0.14.6':FRESHNESS_MARKER,'0.14.7':SESSION_MARKER,'0.14.8':V0148_MARKER}.get(record.get('version'),PREVIOUS_MARKER)
+        expected_marker = {'0.14.0':LEGACY_MARKER,'0.14.3':ADAPTIVE_MARKER,'0.14.4':ADAPTIVE_MARKER,'0.14.5':ADAPTIVE_MARKER,'0.14.6':FRESHNESS_MARKER,'0.14.7':SESSION_MARKER,'0.14.8':V0148_MARKER,'0.14.9':V0149_MARKER}.get(record.get('version'),PREVIOUS_MARKER)
         if expected_marker not in (ROOT/'nvmetrics-agent').read_bytes():raise RuntimeError('wrong previous agent')
-        if BACK.exists():raise RuntimeError('previous v0.14.9 backup exists')
+        if BACK.exists():raise RuntimeError('previous v0.15.0 backup exists')
         return 'upgrade'
     if BACK.exists() or RUNTIME.exists(): raise RuntimeError('unfinished or unknown package install; ask maintainer')
     if not base.PLIST.exists() and not base.MAN.exists():
@@ -231,8 +235,10 @@ def install(payload, uid):
         raise RuntimeError('incorrect native agent or frozen runtime')
     if os.path.lexists(APP) and (APP.is_symlink() or app_identity(APP)!=app_identity(app)):
         raise RuntimeError('existing app identity differs; refusing overwrite')
-    qualified_gpu()
-    inspect_auto(agent,qualified=True)
+    qualified=True
+    try:qualified_gpu()
+    except RuntimeError:qualified=False
+    if qualified:inspect_auto(agent,qualified=True)
     base.safe_dir(ROOT.parent.parent);base.safe_dir(base.PLIST.parent)
     if not os.path.lexists(ROOT.parent):
         ROOT.parent.mkdir(mode=0o755);ROOT.parent.chmod(0o755)
@@ -246,17 +252,20 @@ def install(payload, uid):
     previous={};stage=None;appstage=None;state=None
     try:
         state=installed_state(uid)
+        if not qualified and state!='fresh':
+            if state!='same' or json.loads(RECEIPT.read_text()).get('qualified') is not False:
+                raise RuntimeError('unqualified GPU: refuse migration of existing privileged controller')
         if state=='same':
-            start_job();verify_client(uid);print('NVMetrics package already verified');return
+            start_job();verify_client(uid,False) if not qualified else verify_client(uid);print('NVMetrics package already verified');return
         # Acquire the physical lease BEFORE bootout; prevent new manual starts.
         for path in base.LOCKS[1:]: held.append(acquire(path))
         if state in ('legacy','upgrade'): inspect_auto(ROOT/'nvmetrics-agent',qualified=True)
         was_loaded=loaded()
         if was_loaded: stopped=True;stop_job()
         held.append(acquire(ROOT/'control.lock'))
-        inspect_auto(agent,qualified=True)
+        if qualified:inspect_auto(agent,qualified=True)
         if state in ('legacy','upgrade'): inspect_auto(ROOT/'nvmetrics-agent',qualified=True)
-        backup_app=APP.parent/'.NVMetrics.app.before-v0149'
+        backup_app=APP.parent/'.NVMetrics.app.before-v0150'
         if os.path.lexists(backup_app): raise RuntimeError('previous app backup already exists')
         stage=Path(tempfile.mkdtemp(prefix='.pkg-stage-',dir=ROOT))
         appstage=Path(tempfile.mkdtemp(prefix='.nvmetrics-install-',dir=APP.parent))
@@ -280,12 +289,12 @@ def install(payload, uid):
             RUNTIME.rename(BACK/'Runtime');old_runtime_moved=True
         rtcopy.rename(RUNTIME)
         new_runtime=True
-        config=launch_plist(uid);base.atomic(base.PLIST,config,0o600)
+        config=launch_plist(uid,qualified);base.atomic(base.PLIST,config,0o600)
         if run(['/usr/bin/plutil','-lint',base.PLIST]).returncode: raise RuntimeError('invalid daemon plist')
         manifest={n:{'before':None,'after':sha(ROOT/n)} for n in FILES}
         manifest['plist']={'after':sha(base.PLIST),'uid':uid,'profile':'idle'}
         base.atomic(base.MAN,json.dumps(manifest).encode(),0o600)
-        inspect_auto(ROOT/'nvmetrics-agent',qualified=True)
+        if qualified:inspect_auto(ROOT/'nvmetrics-agent',qualified=True)
         # Do not unlink a live listener. A stale socket is removed only after
         # launchd stopped and all three physical/service locks are held.
         sock=ROOT/'control.sock'
@@ -295,15 +304,16 @@ def install(payload, uid):
             sock.unlink()
         if APP.exists(): APP.rename(backup_app);moved_app=True
         appcopy.rename(APP);new_app=True
-        record={'version':VERSION,'uid':uid,'app':tree_digest(APP),'runtime':tree_digest(RUNTIME),
+        record={'version':VERSION,'uid':uid,'qualified':qualified,'app':tree_digest(APP),'runtime':tree_digest(RUNTIME),
                 'plist':sha(base.PLIST),'files':{n:sha(ROOT/n) for n in FILES}}
         base.atomic(RECEIPT,json.dumps(record).encode(),0o600)
         start_job()
         # Only the service lock is released; the physical session/guard locks
         # remain held while the actual unprivileged IPC handshake is verified.
         os.close(held.pop());control_released=True
-        verify_client(uid)
-        print('NVMetrics installed; firmware AUTO verified. No RM SET. Open NVMetrics in Applications.')
+        if qualified:verify_client(uid)
+        else:verify_client(uid,False)
+        print('NVMetrics installed; firmware AUTO verified. No RM SET. Open NVMetrics in Applications.' if qualified else 'NVMetrics installed; unqualified GPU: read-only fan control. No RM SET.')
     except BaseException:
         if mutated:
             stop_job()
