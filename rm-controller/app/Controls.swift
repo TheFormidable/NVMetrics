@@ -43,6 +43,7 @@ final class Controls: ObservableObject {
     }
 
     nonisolated private var setting: String { Agent.resources.appendingPathComponent("nvmetrics-setting.sh").path }
+    nonisolated private static let privilegedRoot = "/Library/PrivilegedHelperTools/org.nvmetrics.rmguard/"
 
     func refresh() {
         guard !busy && !refreshing else { return }
@@ -72,8 +73,8 @@ final class Controls: ObservableObject {
     func setReposo(_ on: Bool) {
         // one prompt: the file first (it decides after a reboot), then the driver's policy for the apps already open;
         // an older driver has no policy, and then the file alone still applies as apps restart
-        admin([setting, "reposo", on ? "on" : "off"],
-              followedBy: [Agent.agentPath, "policy", on ? "idle" : "normal"]) { out in
+        admin([Self.privilegedRoot + "nvmetrics-setting.sh", "reposo", on ? "on" : "off"],
+              followedBy: [Self.privilegedRoot + "nvmetrics-agent", "policy", on ? "idle" : "normal"]) { out in
             let conf = Controls.fieldAny(out, "reposo")
             let policy = Controls.fieldAny(out, "policy")
             if policy == nil, let why = Controls.fieldAny(out, "why"), why == "refused" || why == "failed" {
@@ -126,7 +127,7 @@ final class Controls: ObservableObject {
     }
 
     func setEco(_ on: Bool) {
-        admin([Agent.agentPath, "eco", on ? "on" : "off"]) { out in
+        admin([Self.privilegedRoot + "nvmetrics-agent", "eco", on ? "on" : "off"]) { out in
             let state = Controls.field(out, "eco")
             self.eco = Controls.onOff(state)
             if self.eco != on { self.message = "La gráfica no confirmó el modo eco solicitado." }
@@ -142,8 +143,9 @@ final class Controls: ObservableObject {
         revision += 1
         busy = true
         Task.detached { [execute] in
-            var cmd = argv.map(Controls.shellQuote).joined(separator: " ")
-            if let more = second { cmd += " && { " + more.map(Controls.shellQuote).joined(separator: " ") + " || true; }" }
+            let clean = ["/usr/bin/env", "-i", "PATH=/usr/bin:/bin:/usr/sbin:/sbin", "HOME=/var/root", "LANG=C"]
+            var cmd = (clean + argv).map(Controls.shellQuote).joined(separator: " ")
+            if let more = second { cmd += " && { " + (clean + more).map(Controls.shellQuote).joined(separator: " ") + " || true; }" }
             let script = "do shell script \(Controls.appleScriptString(cmd)) with administrator privileges"
             // osascript, out of process: NSAppleScript is not safe off the main thread, and this waits on a password
             let (status, out, err) = execute("/usr/bin/osascript", ["-e", script])

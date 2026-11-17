@@ -157,7 +157,7 @@ class TransactionTests(unittest.TestCase):
     def simulate_v014(self,version='0.14.0'):
         pkg.install(self.payload,501)
         self.back.rename(self.root/'original-v014-backup')
-        marker={'0.14.0':pkg.LEGACY_MARKER,'0.14.3':pkg.ADAPTIVE_MARKER,'0.14.4':pkg.ADAPTIVE_MARKER,'0.14.5':pkg.ADAPTIVE_MARKER,'0.14.6':pkg.FRESHNESS_MARKER,'0.14.7':pkg.SESSION_MARKER}.get(version,pkg.PREVIOUS_MARKER)
+        marker={'0.14.0':pkg.LEGACY_MARKER,'0.14.3':pkg.ADAPTIVE_MARKER,'0.14.4':pkg.ADAPTIVE_MARKER,'0.14.5':pkg.ADAPTIVE_MARKER,'0.14.6':pkg.FRESHNESS_MARKER,'0.14.7':pkg.SESSION_MARKER,'0.14.8':pkg.V0148_MARKER}.get(version,pkg.PREVIOUS_MARKER)
         (self.root/'nvmetrics-agent').write_bytes(marker)
         (self.app/'Contents/Resources/nvmetrics-agent').write_bytes(marker)
         (self.rt/'nvmetrics-runtime').write_text('previous frozen runtime')
@@ -175,7 +175,7 @@ class TransactionTests(unittest.TestCase):
         self.assertEqual(pkg.installed_state(501),'same')
         self.assertEqual((self.back/'Runtime/nvmetrics-runtime').read_text(),'previous frozen runtime')
         self.assertTrue((self.root/'original-v014-backup').exists())
-        self.assertTrue((self.app.parent/'.NVMetrics.app.before-v0148').exists())
+        self.assertTrue((self.app.parent/'.NVMetrics.app.before-v0149').exists())
 
     def test_upgrade_from_verified_v0141(self):
         self.simulate_v014('0.14.1')
@@ -222,7 +222,7 @@ class TransactionTests(unittest.TestCase):
         self.assertEqual(pkg.installed_state(501),'upgrade')
         pkg.install(self.payload,501)
         self.assertEqual(pkg.installed_state(501),'same')
-        self.assertEqual(json.loads(self.receipt.read_text())['version'],'0.14.8')
+        self.assertEqual(json.loads(self.receipt.read_text())['version'],'0.14.9')
         self.assertEqual((self.back/'Runtime/nvmetrics-runtime').read_text(),'previous frozen runtime')
         self.assertIn(pkg.MARKER,(self.root/'nvmetrics-agent').read_bytes())
         self.assertTrue(old_back.exists());self.assertTrue(old_app.exists())
@@ -234,6 +234,16 @@ class TransactionTests(unittest.TestCase):
         record['files']['nvmetrics-agent']=pkg.sha(self.root/'nvmetrics-agent')
         self.receipt.write_text(json.dumps(record))
         with self.assertRaisesRegex(RuntimeError,'wrong previous agent'):pkg.installed_state(501)
+
+    def test_upgrade_v0148_without_privileged_setting(self):
+        record=self.simulate_v014('0.14.8')
+        (self.root/'nvmetrics-setting.sh').unlink()
+        del record['files']['nvmetrics-setting.sh']
+        self.receipt.write_text(json.dumps(record))
+        self.assertEqual(pkg.installed_state(501),'upgrade')
+        pkg.install(self.payload,501)
+        self.assertEqual(pkg.installed_state(501),'same')
+        self.assertTrue((self.root/'nvmetrics-setting.sh').exists())
 
     def test_one_revision_everywhere(self):
         # The installer accepts the service only when its ping names this revision, and the package only when its

@@ -1,4 +1,6 @@
-# NVMetrics 0.14.8 — candidato de estabilización para Intel
+# NVMetrics 0.14.9 — candidato de endurecimiento para Intel
+
+La revisión 0.14.9 conserva Manual/AUTO, Eco y Reposo en caliente. Limita Manual a una hora y añade controles de seguridad IPC, rutas privilegiadas fijas y rotación de auditoría. Es experimental: no se ha validado físicamente ni firmado/notarizado para distribución pública. Véase `CHANGELOG.md` y `../SECURITY.md`.
 
 Continuación de `NVMetrics-RM-v0145-complete-source.zip`. **No es todavía una versión certificada como estable en control físico.** Se conserva la base integrada bajo `sources/` y se aplican las correcciones de esta revisión durante la compilación en una copia temporal. Esta entrega se incorpora bajo `rm-controller/` para preservar la implementación previa de la raíz del repositorio. El instalador publicado, en [`packages/0.14.7/`](../packages/0.14.7/), es el de la 0.14.7; la 0.14.8 de este código (Reposo al momento y menú de la barra, más abajo) todavía no tiene instalador publicado y se compila con los pasos de «Construcción y pruebas».
 

@@ -19,8 +19,8 @@ from protocol import ProtocolError,rpm_floor,MANUAL_FLOOR
 
 ROOT=Path('/Library/PrivilegedHelperTools/org.nvmetrics.rmguard')
 LEASE=Path('/var/run/nvmetrics-rm-v05-session.lock')
-MAX_MANUAL_SECONDS=8*3600
-RESCUE_DELAY_SECONDS=8*3600+15
+MAX_MANUAL_SECONDS=3600
+RESCUE_DELAY_SECONDS=MAX_MANUAL_SECONDS+15
 
 class PhysicalError(ValueError):
     def __init__(self,message,*,sample=None,requested=None,applied=None):
@@ -93,8 +93,16 @@ class Physical:
             st=os.fstat(fd)
             if not stat.S_ISREG(st.st_mode) or st.st_uid!=os.geteuid() or st.st_nlink!=1 or st.st_mode&0o077:
                 raise PhysicalError('unsafe_audit_log')
-            os.write(fd,(json.dumps(obj,separators=(',',':'),ensure_ascii=True)+'\n').encode('ascii'))
-        finally:os.close(fd)
+            line=(json.dumps(obj,separators=(',',':'),ensure_ascii=True)+'\n').encode('ascii')
+            # Bound diagnostics without discarding the most recent generation.
+            if st.st_size+len(line)>4*1024*1024:
+                archive=path.with_suffix('.jsonl.1')
+                os.replace(path,archive)
+                os.close(fd);fd=-1
+                fd=os.open(path,flags|os.O_EXCL,0o600)
+            os.write(fd,line)
+        finally:
+            if fd>=0:os.close(fd)
 
     def watchdog_tick(self):
         """Only the running privileged server can keep the independent rescue armed.
@@ -437,7 +445,15 @@ class Physical:
             self._acquire_lease()
             # C guard does read-only preflight/warm-up first. Arm the independent
             # rescue AFTER its ready event, BEFORE the first physical SET.
-            self.guard_log=open(ROOT/'guard-last.stderr.log','ab',buffering=0)
+            log_fd=os.open(ROOT/'guard-last.stderr.log',os.O_WRONLY|os.O_CREAT|getattr(os,'O_NOFOLLOW',0),0o600)
+            try:
+                st=os.fstat(log_fd)
+                if not stat.S_ISREG(st.st_mode) or st.st_uid!=os.geteuid() or st.st_nlink!=1 or st.st_mode&0o077:
+                    raise PhysicalError('unsafe_guard_log')
+                os.ftruncate(log_fd,0)
+                self.guard_log=os.fdopen(log_fd,'wb',buffering=0);log_fd=-1
+            finally:
+                if log_fd>=0:os.close(log_fd)
             self.guard=subprocess.Popen([str(self.agent),'fan','rm-guard'],
                                         stdin=subprocess.PIPE,stdout=subprocess.PIPE,
                                         stderr=self.guard_log,bufsize=0,
@@ -665,6 +681,9 @@ class Physical:
         this lease makes the parent-side intent explicit and auditable.
         """
         self._poll_child()
+        if self.token and time.monotonic()-self.start_time>=MAX_MANUAL_SECONDS:
+            self.stop('hard_deadline')
+            return
         if self.token and self.last_heartbeat and time.monotonic()-self.last_heartbeat>deadline_seconds:
             self.failure=True
             self._audit('client_lease_expired',age_s=round(time.monotonic()-self.last_heartbeat,2))

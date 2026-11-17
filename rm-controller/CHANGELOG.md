@@ -1,3 +1,12 @@
+# 0.14.9 — Endurecimiento de auditoría (candidato)
+
+- Límite absoluto de lectura IPC y timeout de respuesta; una conexión lenta no renueva el plazo.
+- Eco y Reposo ejecutan únicamente las herramientas instaladas bajo la ruta privilegiada fija, con entorno limpio.
+- Registro del helper de ajustes dentro del recibo y migración desde 0.14.8 con respaldos propios.
+- Rotación de auditoría y rescate; archivo stderr del guard verificado y reiniciado por sesión.
+- Sesiones Manual limitadas a una hora, también por el rescate independiente; se conserva el rango 30–100%, AUTO y la protección térmica.
+- CI sin hardware y pruebas de regresión. Validación física y compilación nativa aún pendientes.
+
 # 0.14.8 — Reposo al momento y menú de la barra (2026-11-16)
 
 **Reposo al momento.** Con el driver NullMoth 3.0.1 o posterior, el interruptor de Reposo escribe el archivo y, en la misma petición de contraseña, cambia la política de boost del driver: las apps ya abiertas dejan de pedir relojes máximos, o vuelven a pedirlos, en cuanto vuelven a trabajar y sin cerrar sesión. Con un driver anterior se comporta como antes. El agente gana la orden `policy [status|idle|normal|undecided]`. La respuesta de las dos órdenes se lee con cualquier fin de línea, porque `do shell script` las devuelve unidas por un retorno de carro. Cuando el archivo y la política no coinciden, el interruptor muestra lo que el driver aplica, la ventana lo avisa al abrirse y el registro de la curva AUTO etiqueta Reposo con ese mismo estado. Si el driver no acepta el cambio de política, la ventana vuelve a leer los dos: el interruptor muestra lo que el driver aplica y, si el archivo y la política no coinciden, avisa de ello (si la política no está decidida, dice que el driver no aceptó el cambio). Cancelar la petición de contraseña ya no quita ese aviso.
