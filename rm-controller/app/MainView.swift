@@ -35,14 +35,8 @@ struct MainView: View {
                             Text("0,5 s").tag(500); Text("1 s").tag(1000); Text("2 s").tag(2000)
                         }.pickerStyle(.segmented)
                     default:
-                        metrics
-                        ViewThatFits(in: .horizontal) {
-                            HStack(alignment: .top, spacing: 10) {
-                                telemetry.frame(minWidth: 310, maxWidth: .infinity)
-                                fanPanel.frame(minWidth: 275, maxWidth: 330)
-                            }
-                            VStack(spacing: 10) { telemetry; fanPanel }
-                        }
+                        afterburnerConsole
+                        FanGuardCard().fixedSize(horizontal: false, vertical: true)
                     }
                 }.frame(maxWidth: .infinity, alignment: .topLeading).padding(.bottom, 2)
             }
@@ -110,6 +104,100 @@ struct MainView: View {
                 }.buttonStyle(.plain)
             }
         }.padding(4).carbonPanel(th)
+    }
+
+    // Afterburner-style instrument panel: real telemetry and guarded controls only.
+    // The reference Swift file's simulated GPUBackend is deliberately NOT used.
+    private var afterburnerConsole: some View {
+        VStack(spacing: 10) {
+            HStack(spacing: 8) {
+                Label("GPU MONITOR", systemImage: "gauge.with.needle")
+                    .font(.system(size: 11, weight: .bold)).tracking(1.2)
+                Spacer()
+                Text("LECTURA DIRECTA · \(Double(agent.intervalMs) / 1000, specifier: "%g") s")
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundStyle(th.label)
+            }
+            .foregroundStyle(th.text)
+            HStack(alignment: .top, spacing: 8) {
+                afterburnerColumn(
+                    "RELOJ GPU", value: Fmt.int(s?.clock_gpu_mhz), unit: "MHz",
+                    caption: "Memoria \(Fmt.int(s?.clock_mem_mhz)) MHz",
+                    symbol: "cpu"
+                )
+                afterburnerCenter
+                afterburnerColumn(
+                    "CONSUMO", value: Fmt.num(s?.power_w, 1), unit: "W",
+                    caption: "Límite \(Fmt.num(s?.power_limit_w, 0)) W",
+                    symbol: "bolt.fill"
+                )
+            }
+            telemetry
+            fanPanel
+        }
+    }
+
+    private func afterburnerColumn(_ title: String, value: String, unit: String,
+                                   caption: String, symbol: String) -> some View {
+        VStack(spacing: 7) {
+            Label(title, systemImage: symbol)
+                .font(.system(size: 10, weight: .bold))
+                .foregroundStyle(th.label)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+            Text(value)
+                .font(.system(size: 28, weight: .heavy, design: .rounded))
+                .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.65)
+                .foregroundStyle(th.text)
+            Text(unit)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(Theme.green)
+            Text(caption)
+                .font(.system(size: 10))
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+                .foregroundStyle(th.label)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, minHeight: 150)
+        .background(th.track.opacity(0.45), in: RoundedRectangle(cornerRadius: 10))
+    }
+
+    private var afterburnerCenter: some View {
+        VStack(spacing: 4) {
+            Text("GEFORCE RTX")
+                .font(.system(size: 10, weight: .heavy))
+                .tracking(1.3)
+                .foregroundStyle(th.label)
+            ZStack {
+                Circle()
+                    .stroke(th.track, lineWidth: 9)
+                Circle()
+                    .trim(from: 0, to: min(1, max(0, (s?.temp_gpu_c ?? 0) / 100)))
+                    .stroke(Theme.tempColor(s?.temp_gpu_c),
+                            style: StrokeStyle(lineWidth: 9, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+                VStack(spacing: 0) {
+                    Text(Fmt.num(s?.temp_gpu_c, 1))
+                        .font(.system(size: 30, weight: .heavy, design: .rounded))
+                        .monospacedDigit()
+                        .minimumScaleFactor(0.6)
+                    Text("°C · GPU")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(th.label)
+                }
+            }
+            .frame(width: 108, height: 108)
+            Text("VRAM \(Fmt.num(s?.temp_mem_c, 1)) °C")
+                .font(.system(size: 10, weight: .medium))
+                .monospacedDigit()
+                .foregroundStyle(th.label)
+        }
+        .frame(maxWidth: .infinity, minHeight: 150)
+        .padding(8)
+        .background(th.track.opacity(0.35), in: RoundedRectangle(cornerRadius: 10))
     }
 
     private var metrics: some View {
