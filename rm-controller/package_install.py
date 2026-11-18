@@ -205,7 +205,7 @@ def installed_state(uid):
             base.safe_file(ROOT/n)
             if sha(ROOT/n)!=record['files'][n]: raise RuntimeError('installed file changed:'+n)
         if record.get('version')==VERSION and not app_missing:return 'same'
-        expected_marker = {'0.14.0':LEGACY_MARKER,'0.14.3':ADAPTIVE_MARKER,'0.14.4':ADAPTIVE_MARKER,'0.14.5':ADAPTIVE_MARKER,'0.14.6':FRESHNESS_MARKER,'0.14.7':SESSION_MARKER,'0.14.8':V0148_MARKER,'0.14.9':V0149_MARKER,'0.15.0':V0150_MARKER,'0.15.1':V0151_MARKER,'0.15.2':V0152_MARKER,'0.15.3':V0153_MARKER}.get(record.get('version'),PREVIOUS_MARKER)
+        expected_marker = {'0.14.0':LEGACY_MARKER,'0.14.3':ADAPTIVE_MARKER,'0.14.4':ADAPTIVE_MARKER,'0.14.5':ADAPTIVE_MARKER,'0.14.6':FRESHNESS_MARKER,'0.14.7':SESSION_MARKER,'0.14.8':V0148_MARKER,'0.14.9':V0149_MARKER,'0.15.0':V0150_MARKER,'0.15.1':V0151_MARKER,'0.15.2':V0152_MARKER,'0.15.3':V0153_MARKER,VERSION:MARKER}.get(record.get('version'),PREVIOUS_MARKER)
         if expected_marker not in (ROOT/'nvmetrics-agent').read_bytes():raise RuntimeError('wrong previous agent')
         if BACK.exists():raise RuntimeError('previous v0.15.4 backup exists')
         return 'upgrade'
