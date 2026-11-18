@@ -15,7 +15,7 @@ import subprocess
 import sys
 import time
 
-from protocol import ProtocolError,rpm_floor,MANUAL_FLOOR
+from protocol import ProtocolError,rpm_floor,MANUAL_FLOOR,parse_agent
 
 ROOT=Path('/Library/PrivilegedHelperTools/org.nvmetrics.rmguard')
 LEASE=Path('/var/run/nvmetrics-rm-v05-session.lock')
@@ -429,6 +429,40 @@ class Physical:
             time.sleep(0.45)
         raise PhysicalError('load_profile_spinup_failed_'+last_reason)
 
+    def _rearm_verified_no_write_begin(self):
+        """Recover a rejected pre-START entry, never an attempted RM write.
+
+        Before rescue arming, no START command is sent, so the native guard
+        cannot perform SET. A fresh independent RM GET for both AUTO records
+        is mandatory before dropping the one-shot latch. Fail closed if the
+        guard remains alive or any proof is unavailable.
+        """
+        if self.rescue is not None or self.token is not None or self.last_rm_transaction is not None:
+            return False
+        if self.guard is not None and self.guard.poll() is None:
+            return False
+        try:
+            p=subprocess.run([str(self.agent),'fan','rm-inspect'],
+                             stdin=subprocess.DEVNULL,capture_output=True,text=True,
+                             timeout=5,env={'PATH':'/usr/bin:/bin','HOME':'/var/root','LANG':'C'})
+            if p.returncode != 0 or len(p.stdout)>65536:
+                return False
+            verified=parse_agent(p.stdout,'inspect')
+            if verified.get('mode')!='auto':
+                return False
+        except (OSError,ValueError,subprocess.TimeoutExpired,ProtocolError):
+            return False
+        if self.lease_fd is not None:
+            os.close(self.lease_fd);self.lease_fd=None
+        if self.guard and self.guard.stdout:
+            self.guard.stdout.close()
+        self.guard=None
+        self.used=False
+        self.failure=False
+        self.last_end='entry_refused_no_write_auto_verified'
+        self._audit('entry_refused_no_write_rearmed',reason=(self.last_guard_event or {}).get('reason'))
+        return True
+
     def begin(self,uid,status,inspect,probe=None):
         if not self.enabled:raise PhysicalError('physical_mode_disabled')
         if self.continuous and any((r.get('rpm_min_candidate'),r.get('rpm_max_candidate'))!=(1150,3700)
@@ -445,7 +479,7 @@ class Physical:
             self._audit('manual_begin_refused',reason=reason,
                         gpu_c=status.get('gpu_c'),mem_c=status.get('mem_c'),
                         power_w=status.get('power_w'),util_pct=status.get('util_gpu_pct'))
-            raise PhysicalError(reason)
+            raise PhysicalError(reason,sample=status)
         self.used=True  # deny retries even after failures or expired session
         self.last_trip=None
         self.last_trip_percent=None
@@ -477,9 +511,17 @@ class Physical:
                                              **({'NVMETRICS_RM_CONTINUOUS':'USER_AUTHORIZED_V0150'} if self.continuous else {}),
                                              **({'NVMETRICS_RM_LOAD_TEST':'USER_AUTHORIZED_V10'} if self.load_profile else {})})
             ev=self._read_event(6)
-            if ev.get('event')!='ready':raise PhysicalError('guard_not_ready')
+            if ev.get('event')!='ready':
+                reason=str(ev.get('reason','unknown'))[:80]
+                raise PhysicalError('guard_entry_'+reason,sample=status)
             self._arm_rescue()  # ACK mandatory before START 50; rescue also checks server pulse
-            ev=self._send('START 50','manual')
+            try:
+                ev=self._send('START 50','manual')
+            except PhysicalError as exc:
+                event=self.last_guard_event or {}
+                if event.get('event') in ('entry_refused','start_refused'):
+                    raise PhysicalError('guard_start_'+str(event.get('reason','unknown'))[:80],sample=status) from exc
+                raise
             if ev.get('pct')!=50:raise PhysicalError('guard_percent_mismatch')
             # A successful private RM readback is NOT enough to authorize load:
             # make sure both tachometers show real spinning fans at 50%.
@@ -495,7 +537,13 @@ class Physical:
         except Exception:
             self.failure=True;self.last_end='begin_failed_rescue_pending'
             self._audit('begin_failed_restore_pending',guard_event=self.last_guard_event)
+            # An unsuccessful READ-ONLY entry must not poison all future
+            # sessions. Never use this path once a rescue was armed or START
+            # may have issued SET; those still require independent recovery.
+            no_write=self.rescue is None and self.last_rm_transaction is None
             self._close_guard()
+            if no_write:
+                self._rearm_verified_no_write_begin()
             raise
 
     def _validate(self,uid,token):
