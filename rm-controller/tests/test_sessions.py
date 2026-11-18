@@ -79,6 +79,55 @@ for line in sys.stdin:
         self.assertFalse(self.physical.status()['one_shot_used'])
         self.assertEqual(len(self.rescues),2)
         self.assertTrue((ROOT/'service/physical.py').is_file())
+    def _entry_denied_without_writes(self, regular_mode=0):
+        # The guard declines before START. The independent RM inspection is
+        # simulated separately, with both records and the default checked.
+        snapshot = {
+            'operation':'rm-snapshot',
+            'get_regular_status':0,'get_default_status':0,
+        }
+        for name in ('regular','default'):
+            mode=regular_mode if name=='regular' else 0
+            record={'policy_word_candidate':mode,
+                    'requested_q16_candidate':32768 if mode else 0,
+                    'rpm_min_candidate':1150,'rpm_max_candidate':3700}
+            snapshot[name]={'layout_matches_two':True,'records':[record,record]}
+        import json
+        self.agent.write_text('#!'+sys.executable+'\\n'+
+            'import json,sys\\n'+
+            'if sys.argv[-1] == "rm-inspect":\\n'+
+            ' print('+repr(json.dumps(snapshot))+',flush=True)\\n'+
+            ' sys.exit(0)\\n'+
+            'print(json.dumps({"operation":"guard","event":"entry_refused","pct":0,'
+            '"reason":"critical_sensor_freshness_unverified"}),flush=True)\\n'+
+            'sys.exit(6)\\n')
+        self.agent.chmod(0o700)
+
+    def test_no_write_entry_refusal_rearms_only_after_fresh_rm_auto(self):
+        self._entry_denied_without_writes()
+        with self.assertRaisesRegex(PhysicalError,'guard_entry_critical_sensor_freshness_unverified'):
+            self.start()
+        status=self.physical.status()
+        self.assertFalse(status['one_shot_used'])
+        self.assertFalse(status['active'])
+        self.assertEqual(status['last_end_reason'],'entry_refused_no_write_auto_verified')
+        self.assertFalse(self.physical.failure)
+        self.assertIsNone(self.physical.lease_fd)
+        # A later attempt remains independently authorized; no old token
+        # is adopted and no physical writes were made on either failure.
+        with self.assertRaises(PhysicalError):
+            self.start()
+
+    def test_no_write_entry_refusal_with_manual_rm_remains_latched(self):
+        self._entry_denied_without_writes(regular_mode=1)
+        with self.assertRaisesRegex(PhysicalError,'guard_entry_critical_sensor_freshness_unverified'):
+            self.start()
+        status=self.physical.status()
+        self.assertTrue(status['one_shot_used'])
+        self.assertTrue(self.physical.failure)
+        with self.assertRaises(PhysicalError):
+            self.start()
+
     def test_rescue_failed_fails_closed(self):
         sid=self.start();self.physical.auto(501,sid)
         self.rescues[-1].rc=4
