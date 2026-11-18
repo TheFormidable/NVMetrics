@@ -136,7 +136,14 @@ def acquire(path):
     try:
         base.safe_file(path)
         if os.fstat(fd).st_mode&0o077: raise RuntimeError('unsafe lock permissions')
-        fcntl.flock(fd,fcntl.LOCK_EX|fcntl.LOCK_NB)
+        try:
+            fcntl.flock(fd,fcntl.LOCK_EX|fcntl.LOCK_NB)
+        except BlockingIOError as exc:
+            # A physical/rescue lock must never be stolen, unlinked, or
+            # ignored during a package upgrade. Report precisely which
+            # lock owner must finish before the user retries.
+            raise RuntimeError('installer_lock_busy:'+str(path)+
+                               ' (verify RM AUTO; finish prior Manual/rescue; retry without forcing the lock)') from exc
         return fd
     except BaseException:
         os.close(fd)
