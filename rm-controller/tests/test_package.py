@@ -163,7 +163,7 @@ class TransactionTests(unittest.TestCase):
     def simulate_v014(self,version='0.14.0'):
         pkg.install(self.payload,501)
         self.back.rename(self.root/'original-v014-backup')
-        marker={'0.14.0':pkg.LEGACY_MARKER,'0.14.3':pkg.ADAPTIVE_MARKER,'0.14.4':pkg.ADAPTIVE_MARKER,'0.14.5':pkg.ADAPTIVE_MARKER,'0.14.6':pkg.FRESHNESS_MARKER,'0.14.7':pkg.SESSION_MARKER,'0.14.8':pkg.V0148_MARKER,'0.15.0':pkg.V0150_MARKER,'0.15.1':pkg.V0151_MARKER,'0.15.2':pkg.V0152_MARKER,'0.15.3':pkg.V0153_MARKER}.get(version,pkg.PREVIOUS_MARKER)
+        marker={'0.14.0':pkg.LEGACY_MARKER,'0.14.3':pkg.ADAPTIVE_MARKER,'0.14.4':pkg.ADAPTIVE_MARKER,'0.14.5':pkg.ADAPTIVE_MARKER,'0.14.6':pkg.FRESHNESS_MARKER,'0.14.7':pkg.SESSION_MARKER,'0.14.8':pkg.V0148_MARKER,'0.15.0':pkg.V0150_MARKER,'0.15.1':pkg.V0151_MARKER,'0.15.2':pkg.V0152_MARKER,'0.15.3':pkg.V0153_MARKER,'0.15.4':pkg.V0154_MARKER}.get(version,pkg.PREVIOUS_MARKER)
         (self.root/'nvmetrics-agent').write_bytes(marker)
         (self.app/'Contents/Resources/nvmetrics-agent').write_bytes(marker)
         (self.rt/'nvmetrics-runtime').write_text('previous frozen runtime')
@@ -228,7 +228,7 @@ class TransactionTests(unittest.TestCase):
         self.assertEqual(pkg.installed_state(501),'upgrade')
         pkg.install(self.payload,501)
         self.assertEqual(pkg.installed_state(501),'same')
-        self.assertEqual(json.loads(self.receipt.read_text())['version'],'0.15.4')
+        self.assertEqual(json.loads(self.receipt.read_text())['version'],'0.15.5')
         self.assertEqual((self.back/'Runtime/nvmetrics-runtime').read_text(),'previous frozen runtime')
         self.assertIn(pkg.MARKER,(self.root/'nvmetrics-agent').read_bytes())
         self.assertTrue(old_back.exists());self.assertTrue(old_app.exists())
@@ -312,7 +312,7 @@ class TransactionTests(unittest.TestCase):
         self.assertEqual(pkg.installed_state(501),'same')
         self.assertTrue(old_back.exists())
         self.assertTrue((self.back/'Previous.app').exists())
-        self.assertEqual(json.loads(self.receipt.read_text())['version'],'0.15.4')
+        self.assertEqual(json.loads(self.receipt.read_text())['version'],'0.15.5')
 
     def test_missing_gui_with_verified_0153_receipt_is_repaired(self):
         # An external deletion of the GUI must not strand a correctly
@@ -349,6 +349,14 @@ class TransactionTests(unittest.TestCase):
         (self.app/'unexpected').write_text('modified')
         with self.assertRaisesRegex(RuntimeError,'installed package differs'):
             pkg.installed_state(501)
+
+    def test_upgrade_from_0154_is_a_real_update(self):
+        # An installed 0.15.4 must receive the new GUI behavior.
+        self.simulate_v014('0.15.4')
+        self.assertEqual(pkg.installed_state(501),'upgrade')
+        pkg.install(self.payload,501)
+        self.assertEqual(pkg.installed_state(501),'same')
+        self.assertEqual(json.loads(self.receipt.read_text())['version'],'0.15.5')
 
     def test_upgrade_handshake_failure_restores_runtime_app_and_receipt(self):
         record=self.simulate_v014()

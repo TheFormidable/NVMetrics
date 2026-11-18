@@ -1,3 +1,10 @@
+# 0.15.5 — Manual sin bloqueos de interfaz
+
+- Un solo clic solicita el inicio de Manual; sin diálogo redundante. El guard y rescate siguen activos.
+- La actualización de AUTO en segundo plano ya no bloquea el botón ni sobrescribe una nueva sesión con respuestas anteriores.
+- La interfaz muestra explícitamente la validación de sensores, RM SET/GET y tacómetros antes de afirmar el estado Manual.
+- Migración verificada de 0.15.4; no se cambian los límites térmicos, el protocolo físico ni los requisitos de AUTO.
+
 # 0.15.4 — icono macOS (sin cambios de control físico)
 
 - Reemplaza `app/Resources/AppIcon.png` con el diseño metálico Apple/NVIDIA aportado por el usuario, recortado, centrado y con alfa exterior transparente a 1024 × 1024 píxeles.
