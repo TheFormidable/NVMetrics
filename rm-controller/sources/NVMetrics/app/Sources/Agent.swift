@@ -39,7 +39,7 @@ final class Agent: ObservableObject {
     /// what Alerts judges: the recent readings while there is a current one, nothing once the agent ended (ended()
     /// drops latest but keeps the graph's history), so no warning outlives the agent
     var alertReadings: [Sample] { latest == nil ? [] : history }
-    @Published var intervalMs: Int = 1000 { didSet { restart() } }
+    @Published var intervalMs: Int = 500 { didSet { restart() } }
     @Published var boostMode: BoostMode = Agent.savedBoostMode() {
         didSet {
             UserDefaults.standard.set(boostMode.rawValue, forKey: "nvmetrics.boostMode")
