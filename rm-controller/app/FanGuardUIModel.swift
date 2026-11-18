@@ -144,6 +144,10 @@ final class FanGuardUIModel: ObservableObject {
 
     func refresh() {
         guard !refreshing && !active && !busy && rearmWatch == nil else { return }
+        // Preserve the last independently checked AUTO eligibility while
+        // a non-mutating refresh is in flight. The root service ALWAYS performs
+        // its own fresh AUTO/thermal preflight before allowing START.
+        let previouslyVerifiedAuto = autoVerified && available && physicalEnabled && !oneShotUsed
         refreshing = true
         Task {
             var r = await queryIPC(["control_status"])
@@ -158,6 +162,12 @@ final class FanGuardUIModel: ObservableObject {
             // Never let an older AUTO snapshot overwrite the starting session.
             guard !busy && !active && session == nil else { refreshing = false; return }
             applyStatus(r)
+            if previouslyVerifiedAuto && available && physicalEnabled && !active && !oneShotUsed {
+                // Avoid a false OFF pulse on the button between status and
+                // read-only inspection. Never restore this when the service
+                // reports a session/rescue, failed status or disabled control.
+                autoVerified = true
+            }
             if available && !active && !oneShotUsed {
                 let inspection = await queryIPC(["inspect"])
                 let data = inspection["data"] as? [String: Any]
