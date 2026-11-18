@@ -1,3 +1,10 @@
+# 0.15.4 — icono macOS (sin cambios de control físico)
+
+- Reemplaza `app/Resources/AppIcon.png` con el diseño metálico Apple/NVIDIA aportado por el usuario, recortado, centrado y con alfa exterior transparente a 1024 × 1024 píxeles.
+- `build_package.sh` sigue generando el `AppIcon.icns` multirresolución desde ese PNG y declara `CFBundleIconFile`.
+- Actualiza versión de app, agente, servicio e instalador a 0.15.4. La migración desde una 0.15.3 verificada utiliza nuevo respaldo y mantiene las comprobaciones de integridad, estado AUTO y recuperación; el instalador no debe confundir el icono nuevo con la misma versión ya instalada.
+- No modifica escritura RM, pasos de ventilador, termoprotecciones ni ABI del driver. Validación de icono realizada con inspección RGBA local; compilación nativa macOS pendiente.
+
 # 0.15.3 — Carbon
 
 - Reconstrucción de la interfaz principal con arquitectura de tarjetas, gráfica de doble escala y ventiladores visibles.
