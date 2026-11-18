@@ -84,6 +84,49 @@ class PackagingTests(unittest.TestCase):
             finally:
                 os.close(fd)
 
+    def test_idle_verified_post_rescue_daemon_can_release_installer_lease(self):
+        state={'active':False,'one_shot_used':True,'rearm_pending':False,
+               'watchdog_armed':False,
+               'last_end_reason':'guard_terminated_gpu_temperature_timestamp_invalid_rescue_verified_restart_service'}
+        with patch.object(pkg,'loaded',return_value=True),patch.object(pkg,'run') as runner,\
+             patch.object(pkg,'inspect_auto') as inspect,patch.object(pkg,'stop_job') as stop:
+            runner.return_value=Mock(returncode=0,stdout=json.dumps({'ok':True,'data':state}))
+            self.assertTrue(pkg.retire_verified_latched_service(501))
+            inspect.assert_called_once_with(pkg.ROOT/'nvmetrics-agent',qualified=True)
+            stop.assert_called_once()
+            self.assertIn('control_status',runner.call_args.args[0])
+            self.assertNotIn('manual_auto',runner.call_args.args[0])
+
+    def test_never_stop_daemon_if_manual_active_or_rescue_not_verified(self):
+        safe={'active':False,'one_shot_used':True,'rearm_pending':False,
+              'watchdog_armed':False,
+              'last_end_reason':'guard_terminated_gpu_temperature_timestamp_invalid_rescue_verified_restart_service'}
+        cases=[
+            dict(safe,active=True),dict(safe,rearm_pending=True),
+            dict(safe,watchdog_armed=True),dict(safe,one_shot_used=False),
+            dict(safe,last_end_reason='begin_failed_rescue_pending'),
+            dict(safe,last_end_reason='rescue_unverified_restart_service'),
+        ]
+        for status in cases:
+            with self.subTest(status=status),patch.object(pkg,'loaded',return_value=True),\
+                 patch.object(pkg,'run') as runner,patch.object(pkg,'inspect_auto') as inspect,\
+                 patch.object(pkg,'stop_job') as stop:
+                runner.return_value=Mock(returncode=0,stdout=json.dumps({'ok':True,'data':status}))
+                self.assertFalse(pkg.retire_verified_latched_service(501))
+                inspect.assert_not_called()
+                stop.assert_not_called()
+
+    def test_never_stop_daemon_if_rm_auto_readback_failed(self):
+        state={'active':False,'one_shot_used':True,'rearm_pending':False,
+               'watchdog_armed':False,'last_end_reason':'guard_terminated_sensor_rescue_verified_restart_service'}
+        with patch.object(pkg,'loaded',return_value=True),patch.object(pkg,'run') as runner,\
+             patch.object(pkg,'inspect_auto',side_effect=RuntimeError('RM AUTO not verified')),\
+             patch.object(pkg,'stop_job') as stop:
+            runner.return_value=Mock(returncode=0,stdout=json.dumps({'ok':True,'data':state}))
+            with self.assertRaisesRegex(RuntimeError,'RM AUTO not verified'):
+                pkg.retire_verified_latched_service(501)
+            stop.assert_not_called()
+
     def test_inspect_auto_does_not_write(self):
         records=[{'policy_word_candidate':0,'requested_q16_candidate':0,'rpm_min_candidate':1150,'rpm_max_candidate':3700}]*2
         snapshot={'operation':'rm-snapshot','get_regular_status':0,'get_default_status':0,
@@ -182,6 +225,22 @@ class TransactionTests(unittest.TestCase):
         with self.assertRaises(BlockingIOError):pkg.install(self.payload,501)
         self.stop.assert_not_called();self.start.assert_not_called()
         self.assertFalse(self.app.exists());self.assertFalse(self.plist.exists())
+
+    def test_upgrade_recovers_only_verified_post_rescue_idle_daemon(self):
+        self.simulate_v014('0.15.5')
+        lease=pkg.base.LOCKS[1]
+        calls=[0]
+        def locked_once(path):
+            if path==lease and calls[0]==0:
+                calls[0]+=1
+                raise RuntimeError('installer_lock_busy:'+str(path))
+            return os.open(path,os.O_CREAT|os.O_RDWR,0o600)
+        self.acquire.side_effect=locked_once
+        with patch.object(pkg,'retire_verified_latched_service',return_value=True) as retire:
+            pkg.install(self.payload,501)
+            retire.assert_called_once_with(501)
+        self.assertEqual(pkg.installed_state(501),'same')
+        self.assertTrue(self.app.exists())
 
     def simulate_v014(self,version='0.14.0'):
         pkg.install(self.payload,501)
