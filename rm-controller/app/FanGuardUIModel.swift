@@ -47,7 +47,7 @@ final class FanGuardUIModel: ObservableObject {
         FanSelectionPolicy.nextStep(current: currentPercent, target: targetPercent, floor: manualFloor,
                                     load: loadProfile, thermal: thermalProfile) != nil
     }
-    var canBegin: Bool { !busy && !refreshing && !active && autoVerified && physicalEnabled && !oneShotUsed }
+    var canBegin: Bool { !busy && !active && autoVerified && physicalEnabled && !oneShotUsed }
     func selectPercent(_ percent: Int) {
         guard active && !busy && !ending else { return }
         targetPercent = FanSelectionPolicy.clamp(percent, floor: selectionFloor)
@@ -154,10 +154,14 @@ final class FanGuardUIModel: ObservableObject {
                 await pause(1_000_000_000)
                 r = await queryIPC(["control_status"])
             }
+            // A user may begin Manual while this background refresh is in flight.
+            // Never let an older AUTO snapshot overwrite the starting session.
+            guard !busy && !active && session == nil else { refreshing = false; return }
             applyStatus(r)
             if available && !active && !oneShotUsed {
                 let inspection = await queryIPC(["inspect"])
                 let data = inspection["data"] as? [String: Any]
+                guard !busy && !active && session == nil else { refreshing = false; return }
                 autoVerified = (inspection["ok"] as? Bool) == true && (data?["mode"] as? String) == "auto"
                 rmStatus = autoVerified ? "Automático · verificado" : "AUTO no verificado · Manual no disponible"
             }
@@ -170,9 +174,10 @@ final class FanGuardUIModel: ObservableObject {
             message = oneShotUsed ? "Esperando a que el rescate root confirme AUTO antes de otra sesión." :
                                     "Espera la conexión y verificación automática del servicio.";return
         }
-        busy = true; autoRequested = false; autoVerified = false; targetPercent = manualFloor
+        busy = true; autoRequested = false; autoVerified = false; targetPercent = 50
         rearmWatch?.cancel(); rearmWatch = nil
-        message = "Validando sensores y armando rescate…"
+        rmStatus = "Activando Manual · verificando GPU, guard y tacómetros…"
+        message = "Solicitud enviada. Manual se confirmará únicamente después de RM SET/GET y RPM reales."
         Task {
             let r = await queryIPC(["manual_begin"])
             guard (r["ok"] as? Bool) == true,
