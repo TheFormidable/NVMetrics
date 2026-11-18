@@ -200,25 +200,13 @@ final class FanGuardUIModel: ObservableObject {
             applyStatus(r)
             if autoRequested { busy = false; restoreAuto(); return }
             rearmWatch?.cancel();rearmWatch = nil
-            // The only physically validated spin-up is START 50. Automatically
-            // walk down to the requested floor, not a direct 0 RPM -> 30 write.
-            // Each step retains the original RM and tachometer verification.
-            let reached = await transition(to: manualFloor, token: token)
-            if !reached || autoRequested {
-                if !autoRequested && lowMarginRefused && active && available && readbackConfirmed && session == token && FanSelectionPolicy.canKeepVerifiedStep(current: currentPercent, floor: manualFloor) {
-                    targetPercent = currentPercent; busy = false
-                    message = "Manual activo al \(currentPercent) %. El 30 % requiere más margen térmico/eléctrico. Puedes aumentar o intentar bajar cuando mejore."
-                    heartbeat(token); return
-                }
-                if active && session == token {
-                    message = "No se confirmó el mínimo manual; regresando a AUTO."
-                    busy = false; restoreAuto(); return
-                }
-                busy = false; autoRequested = false; watchForRescueCompletion(); return
-            }
+            // START 50 is the native guard's tested entry point. Leave the GPU
+            // at the verified 50% instead of silently descending to 30% in
+            // several slow, safety-checked steps. A lower target is applied
+            // only after the user explicitly requests it.
             targetPercent = currentPercent
             busy = false
-            message = "Manual activo al \(currentPercent) % · RM verificado."
+            message = "Manual activo al \(currentPercent) % · RM verificado. Selecciona una velocidad y pulsa Aplicar."
             heartbeat(token)
         }
     }
