@@ -43,7 +43,7 @@ struct FanGuardCard: View {
                 .font(.system(size: 13, weight: .semibold)).foregroundStyle(th.text)
             Button("Ver comportamiento AUTO del firmware…") { openWindow(id: "firmware-curve"); NSApp.activate(ignoringOtherApps: true) }
             if fanGuard.active {
-                HStack(alignment: .center, spacing: 18) {
+                HStack(alignment: .center, spacing: 8) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("VELOCIDAD APLICADA").font(.system(size: 10, weight: .semibold)).foregroundStyle(th.label)
                         Text(fanGuard.readbackConfirmed ? "\(fanGuard.currentPercent)%" : "—").font(.system(size: 30, weight: .bold, design: .rounded)).foregroundStyle(th.text).monospacedDigit()
@@ -56,9 +56,9 @@ struct FanGuardCard: View {
                         Text("Los ventiladores funcionarán al \(fanGuard.targetPercent) % al aplicar.").font(.system(size: 11)).foregroundStyle(th.text)
                     }
                     Spacer(minLength: 0)
-                    Button("Automático") { fanGuard.restoreAuto() }
                 }
-                HStack(spacing: 10) {
+                VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 8) {
                     Button("−5 %") { fanGuard.selectPercent(fanGuard.targetPercent - 5) }
                         .disabled(fanGuard.busy || fanGuard.targetPercent <= fanGuard.selectionFloor)
                     // A discrete slider stages a value only. No hardware writes on drag.
@@ -68,6 +68,8 @@ struct FanGuardCard: View {
                     }
                     Button("+5 %") { fanGuard.selectPercent(fanGuard.targetPercent + 5) }
                         .disabled(fanGuard.busy || fanGuard.targetPercent >= 100)
+                }
+                HStack(spacing: 8) {
                     Picker("", selection: Binding(get: { fanGuard.targetPercent }, set: { fanGuard.selectPercent($0) })) {
                         ForEach(Array(stride(from: fanGuard.selectionFloor, through: 100, by: 5)), id: \.self) { pct in
                             Text("\(pct) %").tag(pct)
@@ -75,6 +77,9 @@ struct FanGuardCard: View {
                     }.labelsHidden().frame(width: 75).disabled(fanGuard.busy)
                     Button(fanGuard.busy ? "Aplicando…" : "Aplicar \(fanGuard.targetPercent) %") { fanGuard.applySelection() }
                         .buttonStyle(.borderedProminent).tint(Theme.greenDim).disabled(!fanGuard.canApply)
+                    Spacer(minLength: 0)
+                    Button("AUTO") { fanGuard.restoreAuto() }
+                }
                 }
                 if fanGuard.busy {
                     ProgressView().controlSize(.small)
@@ -84,7 +89,7 @@ struct FanGuardCard: View {
                     Text("Sin cambios pendientes.").font(.system(size: 11)).foregroundStyle(th.label)
                 }
             } else {
-                HStack(spacing: 10) {
+                VStack(alignment: .leading, spacing: 8) {
                     Button("Activar Manual · \(fanGuard.manualFloor) %") { confirmStart = true }
                         .buttonStyle(.borderedProminent).tint(Theme.greenDim).disabled(!fanGuard.canBegin)
                     Button("Actualizar estado") { fanGuard.refresh() }.disabled(fanGuard.busy)

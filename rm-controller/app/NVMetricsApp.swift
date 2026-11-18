@@ -42,8 +42,8 @@ struct NVMetricsApp: App {
                 }
         }
         .windowStyle(.hiddenTitleBar)
-        .defaultSize(width: min(780, NSScreen.main?.visibleFrame.width ?? 780),
-                     height: min(680, (NSScreen.main?.visibleFrame.height ?? 720) - 40))
+        .defaultSize(width: min(760, NSScreen.main?.visibleFrame.width ?? 760),
+                     height: min(540, (NSScreen.main?.visibleFrame.height ?? 580) - 40))
         .windowResizability(.contentMinSize)
         Window("Comportamiento AUTO", id: "firmware-curve") {
             FirmwareCurveView().environmentObject(recorder)

@@ -6,21 +6,38 @@ struct MainView: View {
     @EnvironmentObject var controls: Controls
     @EnvironmentObject var fanGuard: FanGuardUIModel
     @Environment(\.colorScheme) private var scheme
+    @AppStorage("nvmetrics.dashboard.skin") private var skin = "dark"
+    @State private var page = "overview"
+    @Environment(\.openWindow) private var openWindow
+
+    private let pages = [("overview", "gauge.with.needle.fill", "Resumen"),
+                         ("thermal", "chart.xyaxis.line", "Telemetría"),
+                         ("fan", "fanblades.fill", "Ventiladores"),
+                         ("settings", "gearshape.fill", "Ajustes"),
+                         ("health", "shield.checkered", "Diagnóstico")]
 
     var body: some View {
-        let th = Theme(scheme: scheme)
+        let th = Theme(scheme: skin == "light" ? .light : .dark)
         let s = agent.latest
         let alerts = Alerts.list(agent.alertReadings, reposo: controls.reposo)
         VStack(spacing: 8) {
             header(th)
                 .padding(.horizontal, 18).padding(.top, 28)
-            HStack {
-                Text(fanGuard.rmStatus).font(.system(size: 11)).lineLimit(2)
-                Spacer()
-                if fanGuard.active || fanGuard.busy {
-                    Button("Automático") { fanGuard.restoreAuto() }
+            HStack(alignment: .top, spacing: 8) {
+            VStack(spacing: 7) {
+                ForEach(pages.indices, id: \.self) { index in
+                    let item = pages[index]
+                    Button { page = item.0 } label: {
+                        Image(systemName: item.1)
+                            .font(.system(size: 16, weight: .semibold))
+                            .frame(width: 36, height: 34)
+                            .foregroundStyle(page == item.0 ? Color.black : th.text)
+                            .background(page == item.0 ? Theme.green : th.track,
+                                        in: RoundedRectangle(cornerRadius: 7))
+                    }.buttonStyle(.plain).help(item.2).accessibilityLabel(item.2)
                 }
-            }.padding(.horizontal, 18)
+                Spacer(minLength: 0)
+            }.padding(5).background(th.panel, in: RoundedRectangle(cornerRadius: 9))
             ScrollView {
             VStack(spacing: 12) {
             if !alerts.isEmpty { alertBlock(alerts, th) }
@@ -29,8 +46,8 @@ struct MainView: View {
                     .frame(maxWidth: .infinity).padding(10)
                     .background(th.panel).clipShape(RoundedRectangle(cornerRadius: 8))
             }
-            meters(s, th)
-            FanGuardCard().fixedSize(horizontal: false, vertical: true)
+            if page == "overview" || page == "thermal" { meters(s, th) }
+            if page == "overview" || page == "thermal" {
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 185), spacing: 12, alignment: .top)], spacing: 12) {
                 Card(icon: "thermometer.medium", title: "Temperatura") {
                     InfoLine(name: "Núcleo", value: "\(Fmt.num(s?.temp_gpu_c, 1)) °C")
@@ -45,6 +62,9 @@ struct MainView: View {
                     InfoLine(name: "Límite", value: "\(Fmt.num(s?.power_limit_w, 0)) W")
                     InfoLine(name: "Estado", value: s?.pstate.map { "P\($0)" } ?? "--")
                     InfoLine(name: "Uso GPU", value: "\(Fmt.int(s?.util_gpu_pct)) %")
+                    InfoLine(name: "Uso memoria", value: "\(Fmt.int(s?.util_mem_pct)) %")
+                    InfoLine(name: "Reloj SM", value: "\(Fmt.int(s?.clock_sm_mhz)) MHz")
+                    InfoLine(name: "Reloj vídeo", value: "\(Fmt.int(s?.clock_video_mhz)) MHz")
                     InfoLine(name: "Vídeo (cod./decod.)", value: "\(Fmt.int(s?.util_enc_pct)) / \(Fmt.int(s?.util_dec_pct)) %")
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Frenando por").font(.system(size: 11, weight: .medium)).foregroundStyle(th.label)
@@ -54,23 +74,65 @@ struct MainView: View {
                 }
                 FanCard()
             }
-            FanCurveCard().fixedSize(horizontal: false, vertical: true)
-            modes(th)
-            HStack(alignment: .top, spacing: 12) {
-                BoostCard().frame(maxWidth: .infinity)
-                HealthCard(health: s?.health, hasReadings: s != nil).frame(maxWidth: .infinity)
+            if page == "overview" {
+                Button("Control de ventiladores") { page = "fan" }
+                    .buttonStyle(.borderedProminent).tint(Theme.greenDim)
             }
-            .fixedSize(horizontal: false, vertical: true)
+            }
+            if page == "fan" {
+            FanCard()
+            FanGuardCard().fixedSize(horizontal: false, vertical: true)
+            FanCurveCard().fixedSize(horizontal: false, vertical: true)
+            Button("Comportamiento AUTO") { openWindow(id: "firmware-curve") }
+            }
+            if page == "settings" {
+            modes(th)
+            BoostCard().frame(maxWidth: .infinity)
+            Picker("Intervalo de lectura", selection: $agent.intervalMs) {
+                Text("0,5 s").tag(500); Text("1 s").tag(1000); Text("2 s").tag(2000)
+            }
+            .pickerStyle(.segmented)
+            }
+            if page == "health" {
+                HealthCard(health: s?.health, hasReadings: s != nil)
+                if let profile = s?.gpu_profile {
+                    Card(icon: "cpu", title: "Canales observados") {
+                        InfoLine(name: "GPU ID", value: String(profile.gpu_id))
+                        InfoLine(name: "Térmicos", value: profile.thermalNames.joined(separator: ", "))
+                        InfoLine(name: "Potencia", value: profile.powerNames.joined(separator: ", "))
+                        InfoLine(name: "Tacómetros", value: String(profile.tachSlots.count))
+                    }
+                }
+            }
             if let m = controls.message {
                 Text(m).font(.system(size: 12)).foregroundStyle(th.text).frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-            .padding(.horizontal, 18).padding(.vertical, 12)
+            .padding(.horizontal, 4).padding(.vertical, 8)
             .frame(maxWidth: .infinity)
             }
+            }.padding(.horizontal, 12)
+            HStack(spacing: 8) {
+                Image(systemName: "shield.lefthalf.filled").foregroundStyle(Theme.green)
+                Text(fanGuard.rmStatus).font(.system(size: 10)).lineLimit(2)
+                Spacer(minLength: 4)
+                if fanGuard.active || fanGuard.busy {
+                    Button("AUTO") { fanGuard.restoreAuto() }.buttonStyle(.borderedProminent).tint(Theme.greenDim)
+                }
+            }.padding(9).background(th.panel, in: RoundedRectangle(cornerRadius: 9))
+                .padding(.horizontal, 12).padding(.bottom, 8)
         }
-        .frame(minWidth: 620, minHeight: 360)
-        .background(th.background)
+        .frame(minWidth: 480, minHeight: 340)
+        .background {
+            if skin == "glass" {
+                Rectangle().fill(.regularMaterial)
+                    .overlay(LinearGradient(colors: [Color.green.opacity(0.22), .clear, Color.cyan.opacity(0.17)], startPoint: .topLeading, endPoint: .bottomTrailing))
+            } else if skin == "graphite" {
+                LinearGradient(colors: [Color(white: 0.24), Color(white: 0.10)], startPoint: .topLeading, endPoint: .bottomTrailing)
+            } else { th.background }
+        }
+        .environment(\.colorScheme, skin == "light" ? .light : .dark)
+        .preferredColorScheme(skin == "light" ? .light : .dark)
         .onAppear { controls.refresh() }
     }
 
@@ -86,12 +148,20 @@ struct MainView: View {
                     .font(.system(size: 24, weight: .heavy, design: .rounded)).italic()
                 Text("MONITOR DE GRÁFICA").font(.system(size: 9, weight: .semibold)).kerning(2).foregroundStyle(th.label)
             }
-            Spacer()
-            Picker("", selection: $agent.intervalMs) {
-                Text("0,5 s").tag(500); Text("1 s").tag(1000); Text("2 s").tag(2000)
+            .padding(.horizontal, 20).padding(.vertical, 5)
+            .background {
+                DashboardBadge().fill(LinearGradient(colors: [th.track, th.panel], startPoint: .top, endPoint: .bottom))
             }
-            .pickerStyle(.segmented).frame(width: 150)
-            .help("Cada cuánto se lee la tarjeta")
+            .overlay { DashboardBadge().stroke(Theme.green.opacity(0.55), lineWidth: 1) }
+            Spacer()
+            Picker("Estilo", selection: $skin) {
+                Text("Oscuro").tag("dark")
+                Text("Claro").tag("light")
+                Text("Grafito").tag("graphite")
+                Text("Cristal").tag("glass")
+            }
+            .pickerStyle(.menu).frame(width: 125)
+            .help("Apariencia de NVMetrics")
         }
     }
 
@@ -136,17 +206,19 @@ struct MainView: View {
     }
 
     private func meters(_ s: Sample?, _ th: Theme) -> some View {
-        let maxGpu = Double(max(agent.history.compactMap { $0.clock_gpu_mhz }.max() ?? 0, 3000))
-        let maxMem = Double(max(agent.history.compactMap { $0.clock_mem_mhz }.max() ?? 0, 1))
+        let maxGpu = Double(max(1, max(agent.history.compactMap { $0.clock_gpu_mhz }.max() ?? 0, s?.clock_gpu_mhz ?? 0)))
+        let maxMem = Double(max(1, max(agent.history.compactMap { $0.clock_mem_mhz }.max() ?? 0, s?.clock_mem_mhz ?? 0)))
         return VStack(spacing: 4) {
             MeterRow(icon: "cpu", name: "GPU", value: Fmt.int(s?.clock_gpu_mhz), unit: "MHz",
                      fraction: s?.clock_gpu_mhz.map { Double($0) / maxGpu })
             MeterRow(icon: "memorychip", name: "MEM", value: Fmt.int(s?.clock_mem_mhz), unit: "MHz",
                      fraction: s?.clock_mem_mhz.map { Double($0) / maxMem })
             MeterRow(icon: "bolt.fill", name: "POTENCIA", value: Fmt.num(s?.power_w, 0), unit: "W",
-                     fraction: s?.power_w.flatMap { w in s?.power_limit_w.map { w / $0 } })
+                     fraction: s?.power_w.flatMap { w in s?.power_limit_w.flatMap { $0 > 0 ? w / $0 : nil } })
             MeterRow(icon: "thermometer.medium", name: "TEMP", value: Fmt.num(s?.temp_gpu_c, 0), unit: "°C",
                      fraction: s?.temp_gpu_c.map { $0 / 100 }, color: Theme.tempColor(s?.temp_gpu_c))
+            Text("Relojes: máximo observado · potencia: límite leído · temperatura: escala 100 °C")
+                .font(.system(size: 10)).foregroundStyle(th.label)
         }
         .padding(12)
         .background(th.panel.opacity(th.dark ? 0.6 : 1))
@@ -155,7 +227,7 @@ struct MainView: View {
     }
 
     private func modes(_ th: Theme) -> some View {
-        HStack(alignment: .top, spacing: 12) {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 230), spacing: 8, alignment: .top)], spacing: 8) {
             modeCard(th, title: "Modo reposo", icon: "moon.fill", value: controls.reposo,
                      detail: "Deja que la gráfica baje a su estado de bajo consumo cuando no haces nada. "
                          + (controls.reposoHot == true ? "Se aplica al momento, también a las apps abiertas."
@@ -191,6 +263,19 @@ struct MainView: View {
     private func vram(_ s: Sample?) -> String {
         guard let used = s?.vram_used_mib, let total = s?.vram_total_mib else { return "--" }
         return String(format: "%.1f / %.1f GB", Double(used) / 1024, Double(total) / 1024)
+    }
+}
+
+private struct DashboardBadge: Shape {
+    func path(in rect: CGRect) -> Path {
+        let bevel = min(14, rect.width / 5)
+        var path = Path()
+        path.move(to: CGPoint(x: rect.minX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX - bevel, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.minX + bevel, y: rect.maxY))
+        path.closeSubpath()
+        return path
     }
 }
 

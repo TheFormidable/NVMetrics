@@ -1,3 +1,11 @@
+# 0.15.2 — candidato de panel compacto
+
+- Navegación lateral, placa de marca angular, cuatro apariencias persistentes y barras de telemetría segmentadas.
+- Tamaño inicial más compacto, paneles adaptables y estado RM con AUTO fuera del área desplazable.
+- Conserva controles reales, protecciones, icono y restauración de 0.15.1. Sin controles ficticios.
+- Instalador con identidad nueva y migración desde 0.15.0 y 0.15.1.
+- Pendiente de compilación y comprobación visual nativas.
+
 # 0.15.1 — candidato de interfaz adaptable y recuperación
 
 - Ventana desplazable y redimensionable con tamaño inicial limitado al espacio visible; tarjetas adaptables y acceso a AUTO fijo en la cabecera.
