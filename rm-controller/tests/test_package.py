@@ -1,5 +1,6 @@
 import json
 import os
+import fcntl
 import plistlib
 import sys
 import tempfile
@@ -60,6 +61,28 @@ class PackagingTests(unittest.TestCase):
             self.assertNotEqual(first,pkg.tree_digest(t))
             (t/'external').symlink_to('/etc/passwd')
             with self.assertRaises(RuntimeError):pkg.tree_digest(t)
+
+    def test_installer_reports_occupied_lock_path_without_stealing_it(self):
+        # The macOS error was '[Errno 35] Resource temporarily unavailable'.
+        # Log the path so an operator can distinguish physical lease, native
+        # guard, control socket and package-install serialization.
+        with tempfile.TemporaryDirectory() as folder:
+            lock=Path(folder)/'fan-session.lock'
+            fd=os.open(lock,os.O_CREAT|os.O_RDWR,0o600)
+            try:
+                fcntl.flock(fd,fcntl.LOCK_EX|fcntl.LOCK_NB)
+                with patch.object(pkg.base,'safe_file'):
+                    with self.assertRaisesRegex(RuntimeError,'installer_lock_busy:.*fan-session.lock'):
+                        pkg.acquire(lock)
+                # The original owner has not been forcibly unlocked.
+                other=os.open(lock,os.O_RDWR)
+                try:
+                    with self.assertRaises(BlockingIOError):
+                        fcntl.flock(other,fcntl.LOCK_EX|fcntl.LOCK_NB)
+                finally:
+                    os.close(other)
+            finally:
+                os.close(fd)
 
     def test_inspect_auto_does_not_write(self):
         records=[{'policy_word_candidate':0,'requested_q16_candidate':0,'rpm_min_candidate':1150,'rpm_max_candidate':3700}]*2
