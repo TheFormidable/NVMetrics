@@ -32,7 +32,7 @@ struct NVMetricsApp: App {
                     menu.start(agent: agent, controls: controls)
                 }
         }
-        Window("NVMetrics", id: "main") {
+        Window("NVMetrics", id: "main-carbon") {
             MainView()
                 .environmentObject(agent)
                 .environmentObject(controls).environmentObject(fanGuard)
@@ -41,9 +41,8 @@ struct NVMetricsApp: App {
                     menu.start(agent: agent, controls: controls)
                 }
         }
-        .windowStyle(.hiddenTitleBar)
-        .defaultSize(width: min(760, NSScreen.main?.visibleFrame.width ?? 760),
-                     height: min(540, (NSScreen.main?.visibleFrame.height ?? 580) - 40))
+        .defaultSize(width: min(840, NSScreen.main?.visibleFrame.width ?? 840),
+                     height: min(570, (NSScreen.main?.visibleFrame.height ?? 650) - 40))
         .windowResizability(.contentMinSize)
         Window("Comportamiento AUTO", id: "firmware-curve") {
             FirmwareCurveView().environmentObject(recorder)

@@ -1,3 +1,11 @@
+# 0.15.3 — Carbon
+
+- Reconstrucción de la interfaz principal con arquitectura de tarjetas, gráfica de doble escala y ventiladores visibles.
+- Ventana nueva de 840 × 570 pt por defecto, limitada al área visible; adaptación a dos columnas en pantallas estrechas.
+- Controles rápidos Eco, Reposo y Boost, sin cambiar las protecciones RM.
+- Respaldo de la aplicación anterior dentro del respaldo protegido del instalador, no en Aplicaciones.
+- Pendiente de compilación y validación visual nativas.
+
 # 0.15.2 — candidato de panel compacto
 
 - Navegación lateral, placa de marca angular, cuatro apariencias persistentes y barras de telemetría segmentadas.

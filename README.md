@@ -1,5 +1,9 @@
 # NVMetrics
 
+## Candidato 0.15.3 — Carbon
+
+Panel principal reconstruido: cuatro métricas grandes, gráfico con escalas térmica y de potencia, ventiladores junto a telemetría y controles Eco, Reposo y Boost siempre visibles. Nueva identidad de ventana para no recuperar el tamaño de la revisión anterior. El respaldo de la aplicación de esta revisión queda en el directorio protegido del instalador, fuera de Aplicaciones. Se conservan los respaldos históricos. Pendiente de validación visual y compilación nativa.
+
 ## Candidato 0.15.2 — panel compacto
 
 Nuevo diseño inspirado en Afterburner: indicadores segmentados, navegación lateral, cuatro estilos persistentes (oscuro, claro, grafito y cristal), paneles adaptables y AUTO accesible durante una sesión manual. No se añaden capacidades de escritura ni se relajan las protecciones. Se mantiene el icono nativo de 0.15.1. La compilación y validación visual en macOS están pendientes.
