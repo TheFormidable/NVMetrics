@@ -175,6 +175,26 @@ class IPCServer:
         self.physical.failure=True
         self.physical.stop('load_health_trip_'+reason)
 
+    def _verified_rescue_can_recycle_daemon(self):
+        """Release an idle failed daemon only after independent + fresh AUTO.
+
+        The native guard must already have exited and its independent rescue
+        must have completed with success. A second, CURRENT read-only RM GET
+        is required here. Any malformed, missing or non-AUTO reply leaves the
+        fail-closed latch untouched.
+        """
+        if not self.physical.verified_rescue_ready_for_service_recycle():
+            return False
+        try:
+            reading=self.backend.call('inspect',timeout=3.5)
+        except (ProtocolError,OSError,ValueError,TypeError):
+            return False
+        if reading.get('mode')!='auto':
+            return False
+        self.physical._audit('verified_rescue_daemon_recycle',rm_mode='auto',
+                             last_end=self.physical.last_end)
+        return True
+
     def handle(self,conn):
         conn.settimeout(1.0)
         try:
@@ -220,6 +240,7 @@ class IPCServer:
                 print(f'IPC READY socket={self.path} uid={self.allowed_uid} '+
                       f'lifetime={seconds}s physical={"ARMED" if self.physical.enabled else "DISABLED"} safety_profile={self.physical.safety_profile} sequential-sessions',flush=True)
                 last_client_activity=time.monotonic()
+                next_recycle_check=0.
                 limit=time.monotonic()+seconds if seconds else None
                 self.service_deadline=limit
                 if hasattr(self.physical,'service_deadline'):self.physical.service_deadline=limit
@@ -230,6 +251,18 @@ class IPCServer:
                         if hasattr(self.physical,'watchdog_tick'):self.physical.watchdog_tick()
                         if self.physical.token is None:self.backend.close()
                         self.load_healthcheck()
+                        # Fatal guard trips remain fail-closed until rescue is
+                        # independently verified. Once confirmed, the old root
+                        # service must NOT retain its session lease indefinitely.
+                        # A fresh RM GET checks AUTO again, then graceful exit
+                        # releases flock and launchd can start a clean instance.
+                        # Never exit or recycle an active Manual/rescue session.
+                        now=time.monotonic()
+                        if (launchd_listener is not None and now>=next_recycle_check and
+                            self.physical.verified_rescue_ready_for_service_recycle()):
+                            next_recycle_check=now+3.
+                            if self._verified_rescue_can_recycle_daemon():
+                                break
                         # On-demand daemon returns idle resources to launchd;
                         # never exit while any guard/rescue or session is pending.
                         if (launchd_listener is not None and time.monotonic()-last_client_activity>45 and
