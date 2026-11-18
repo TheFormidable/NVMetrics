@@ -262,6 +262,19 @@ class Physical:
         self.last_end='auto_independently_verified_ready'
         self._audit('rescue_verified_auto_rearmed',previous_trip=self.last_trip,automatic_recovery=recoverable)
 
+    def verified_rescue_ready_for_service_recycle(self):
+        """An inactive, fatally latched service may release its lock and exit.
+
+        An independent root rescue has already exited successfully after
+        verifying firmware AUTO. The server must additionally perform a NEW
+        read-only RM inspect before retiring; this predicate alone never
+        authorizes Manual or hardware writes.
+        """
+        return (self.token is None and self.used and self.failure and
+                self.last_end.endswith('_rescue_verified_restart_service') and
+                self.guard is not None and self.guard.poll() is not None and
+                self.rescue is not None and self.rescue.poll()==0)
+
     @staticmethod
     def idle_ok(s,rm,thermal=False,low=False,continuous=False):
         import math
