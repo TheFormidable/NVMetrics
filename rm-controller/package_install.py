@@ -192,13 +192,19 @@ def installed_state(uid):
         if record.get('version') not in ('0.14.0','0.14.1','0.14.2','0.14.3','0.14.4','0.14.5','0.14.6','0.14.7','0.14.8','0.14.9','0.15.0','0.15.1','0.15.2','0.15.3',VERSION) or record.get('uid')!=uid:
             raise RuntimeError('different installed package/authorized user')
         base.safe_file(base.PLIST)
-        if sha(base.PLIST)!=record['plist'] or tree_digest(RUNTIME)!=record['runtime'] or tree_digest(APP)!=record['app']:
+        # The GUI can be deleted or moved while a verified privileged service
+        # remains installed. Recover a missing app only when the trusted receipt,
+        # launchd plist, frozen runtime, and all privileged files still match.
+        if sha(base.PLIST)!=record['plist'] or tree_digest(RUNTIME)!=record['runtime']:
+            raise RuntimeError('installed package differs; do not overwrite')
+        app_missing = not os.path.lexists(APP)
+        if not app_missing and tree_digest(APP)!=record['app']:
             raise RuntimeError('installed package differs; do not overwrite')
         for n in FILES:
             if n=='nvmetrics-setting.sh' and record.get('version') not in ('0.14.9','0.15.0','0.15.1','0.15.2','0.15.3',VERSION):continue
             base.safe_file(ROOT/n)
             if sha(ROOT/n)!=record['files'][n]: raise RuntimeError('installed file changed:'+n)
-        if record.get('version')==VERSION:return 'same'
+        if record.get('version')==VERSION and not app_missing:return 'same'
         expected_marker = {'0.14.0':LEGACY_MARKER,'0.14.3':ADAPTIVE_MARKER,'0.14.4':ADAPTIVE_MARKER,'0.14.5':ADAPTIVE_MARKER,'0.14.6':FRESHNESS_MARKER,'0.14.7':SESSION_MARKER,'0.14.8':V0148_MARKER,'0.14.9':V0149_MARKER,'0.15.0':V0150_MARKER,'0.15.1':V0151_MARKER,'0.15.2':V0152_MARKER,'0.15.3':V0153_MARKER}.get(record.get('version'),PREVIOUS_MARKER)
         if expected_marker not in (ROOT/'nvmetrics-agent').read_bytes():raise RuntimeError('wrong previous agent')
         if BACK.exists():raise RuntimeError('previous v0.15.4 backup exists')
