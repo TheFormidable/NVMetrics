@@ -335,6 +335,40 @@ static void nvm_v09_safety_snapshot(const struct nvm_guard_state *state,
         (unsigned long long)(now>=state->heartbeat_ms?now-state->heartbeat_ms:0));
 }
 
+/* Diagnostic only: never permits an RM write or changes the safety envelope. */
+static const char *nvm_v04_entry_reason(struct nvm_guard_sample s)
+{
+    if(!s.fan_fresh) return "critical_sensor_freshness_unverified";
+    if(!isfinite(s.gpu_c) || s.gpu_c<=0) return "gpu_sensor_invalid";
+    if(!isfinite(s.mem_c) || s.mem_c<=0) return "memory_sensor_invalid";
+    if(!isfinite(s.watts) || s.watts<0) return "power_sensor_invalid";
+    if(s.gpu_c >= (nvm_guard_thermal_profile ? NVM_GUARD_ENTRY_GPU_C : NVM_GUARD_IDLE_GPU_C))
+        return "gpu_temperature_entry_limit";
+    if(s.mem_c >= (nvm_guard_thermal_profile ? NVM_GUARD_ENTRY_MEM_C : NVM_GUARD_IDLE_MEM_C))
+        return "memory_temperature_entry_limit";
+    if(s.watts > (nvm_guard_continuous ? 1000.0 : nvm_guard_thermal_profile ? NVM_GUARD_ENTRY_W : 35.0))
+        return "power_entry_limit";
+    if(s.util_pct<0 || s.util_pct>(nvm_guard_continuous ? 100 : 20))
+        return "utilization_entry_limit";
+    return "entry_state_not_safe";
+}
+static void nvm_v04_entry_diagnostic(struct nvm_guard_sample s, const char *phase)
+{
+    fprintf(stderr,
+        "fan guard: ENTRY_REFUSED phase=%s reason=%s profile=%s "
+        "gpu_c=%.2f mem_c=%.2f power_w=%.2f util_pct=%d fresh=%d "
+        "ts_gpu=%d ts_mem=%d ts_power=%d ts_fan=%d "
+        "age_gpu_ms=%llu age_mem_ms=%llu age_power_ms=%llu age_fan_ms=%llu\n",
+        phase,nvm_v04_entry_reason(s),
+        nvm_guard_thermal_profile?"thermal_supervised":nvm_guard_load_profile?"attended_load_test":"idle_only",
+        s.gpu_c,s.mem_c,s.watts,s.util_pct,s.fan_fresh,
+        nvm_v11_sensor_diag.gpu_ts_ok,nvm_v11_sensor_diag.mem_ts_ok,
+        nvm_v11_sensor_diag.power_ts_ok,nvm_v11_sensor_diag.fan_ts_ok,
+        (unsigned long long)nvm_v11_sensor_diag.gpu_temp_age_ms,
+        (unsigned long long)nvm_v11_sensor_diag.mem_age_ms,
+        (unsigned long long)nvm_v11_sensor_diag.power_age_ms,
+        (unsigned long long)nvm_v11_sensor_diag.fan_age_ms);
+}
 static int nvm_v04_guard_cli(void)
 {
     if(geteuid()!=0 || !getenv("NVMETRICS_FAN_GUARD") ||
@@ -394,7 +428,9 @@ static int nvm_v04_guard_cli(void)
         sample=nvm_v04_sample(live,&last_stamp,&last_change,mono_ms());
     }
     if(!nvm_guard_entry_ok(sample)){
-        fprintf(stderr,"fan guard: no safe entry telemetry\n");return 6;
+        nvm_v04_entry_diagnostic(sample,"baseline");
+        nvm_v04_event("entry_refused",0,nvm_v04_entry_reason(sample));
+        return 6;
     }
     nvm_v04_event("ready",0,"read_only_baseline_auto");
     char line[80]={0};size_t n=0;
@@ -450,7 +486,13 @@ static int nvm_v04_guard_cli(void)
         now=mono_ms();
         if(!strcmp(line,"START 50") && !state.ever_started){
             sample=nvm_v04_sample(live,&last_stamp,&last_change,now);
-            if(!nvm_guard_start(&state,sample,now) || !nvm_v04_read_state(0,0)){
+            if(!nvm_guard_entry_ok(sample)){
+                nvm_v04_entry_diagnostic(sample,"start");
+                nvm_v04_event("entry_refused",0,nvm_v04_entry_reason(sample));
+                code=14;break;
+            }
+            if(!nvm_v04_read_state(0,0) || !nvm_guard_start(&state,sample,now)){
+                nvm_v04_event("start_refused",0,"firmware_AUTO_or_entry_changed");
                 code=14;break;
             }
             /* Mark need_auto before the SET (even a failed SET may partially act). */
