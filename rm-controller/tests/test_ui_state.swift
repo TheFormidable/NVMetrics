@@ -96,11 +96,11 @@ final class PolicyAnswer: @unchecked Sendable {
             let ipc = FakeIPC()
             let model = await make(ipc)
             model.begin(); await until { model.active && !model.busy }
-            precondition(model.currentPercent == 30)
-            precondition(ipc.writes.map { $0[0] } == ["manual_begin"] + Array(repeating: "manual_lower", count: 4))
+            precondition(model.currentPercent == 50)
+            precondition(ipc.writes.map { $0[0] } == ["manual_begin"])
             let writes = ipc.writes.count
             model.selectPercent(100)
-            precondition(model.currentPercent == 30 && model.targetPercent == 100 && ipc.writes.count == writes)
+            precondition(model.currentPercent == 50 && model.targetPercent == 100 && ipc.writes.count == writes)
             model.applySelection(); await until { !model.busy }
             precondition(model.currentPercent == 100)
             model.selectPercent(30); model.applySelection(); await until { !model.busy }
