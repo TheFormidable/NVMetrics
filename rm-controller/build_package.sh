@@ -4,7 +4,7 @@ set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd -P)"
 REPO="${1:-$HERE/sources/NVMetrics}"
 DRIVER="${2:-$HERE/sources/nvidia-macos-driver}"
-OUT="${3:-$HOME/Desktop/NVMetrics-v0150-release}"
+OUT="${3:-$HOME/Desktop/NVMetrics-v0151-release}"
 [[ $(uname -s) == Darwin && $(uname -m) == x86_64 ]] || { echo 'Run on Intel macOS.' >&2; exit 2; }
 source "$HERE/find_build_python.sh"
 PYTHON="$(find_build_python)" || { echo 'No compatible build Python; run Build.command.' >&2; exit 2; }
@@ -29,9 +29,18 @@ cp "$HERE/app/build_app.sh" "$STAGE/repo/app/build_app.sh"
 "$STAGE/repo/app/build_app.sh" "$DRIVER" "$STAGE/build"
 APP="$STAGE/payload/NVMetrics.app"
 /usr/bin/ditto "$STAGE/build/NVMetrics.app" "$APP"
+# Build the native multi-resolution application icon before signing the bundle.
+ICONSET="$STAGE/AppIcon.iconset"
+mkdir "$ICONSET"
+for size in 16 32 128 256 512; do
+  /usr/bin/sips -z "$size" "$size" "$HERE/app/Resources/AppIcon.png" --out "$ICONSET/icon_${size}x${size}.png" >/dev/null
+  /usr/bin/sips -z "$((size*2))" "$((size*2))" "$HERE/app/Resources/AppIcon.png" --out "$ICONSET/icon_${size}x${size}@2x.png" >/dev/null
+done
+/usr/bin/iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/AppIcon.icns"
+test -s "$APP/Contents/Resources/AppIcon.icns"
 AGENT="$APP/Contents/Resources/nvmetrics-agent"
 test -x "$AGENT"
-strings "$AGENT" | grep 'NVMETRICS_RM_V0150_CONTINUOUS' >/dev/null
+strings "$AGENT" | grep 'NVMETRICS_RM_V0151_CONTINUOUS' >/dev/null
 # Idle mode for the apps already open needs the "policy" command built against the driver's boost-policy header.
 # Without the header the agent still builds and answers {"policy":null,"why":"build"}: stop here instead.
 rc=0; "$AGENT" policy bogus >"$STAGE/policy-check.log" 2>&1 || rc=$?
@@ -60,7 +69,8 @@ chmod +x "$GUARD/Runtime/nvmetrics-runtime"
 import plistlib,sys
 from pathlib import Path
 p=Path(sys.argv[1]);obj=plistlib.loads(p.read_bytes())
-obj['CFBundleShortVersionString']='0.15.0';obj['CFBundleVersion']='0.15.0'
+obj['CFBundleShortVersionString']='0.15.1';obj['CFBundleVersion']='0.15.1'
+obj['CFBundleIconFile']='AppIcon.icns'
 p.write_bytes(plistlib.dumps(obj))
 PY
 # Verify runtime CLI entrypoint works without external Python or a GPU write.
@@ -93,12 +103,12 @@ PY
 "$PYTHON" -B "$HERE/verify_package_payload.py" render "$STAGE/scripts"
 echo 'Checking native ZIP round-trip before pkgbuild…'
 NVMETRICS_BUILD_PYTHON="$PYTHON" "$HERE/verify_scripts.sh" "$STAGE/scripts" "$STAGE/roundtrip" "$STAGE/payload"
-PKG="$OUT/NVMetrics-0.15.0-Candidate-Intel.pkg"
+PKG="$OUT/NVMetrics-0.15.1-Candidate-Intel.pkg"
 [[ ! -e "$PKG" ]] || { echo 'Output package already exists; choose a new directory.' >&2; exit 2; }
 CANDIDATE="$STAGE/candidate.pkg"
 PKG_ARGS=()
 if [[ -n "${NVMETRICS_INSTALLER_IDENTITY:-}" ]]; then PKG_ARGS=(--sign "$NVMETRICS_INSTALLER_IDENTITY"); fi
-/usr/bin/pkgbuild --nopayload --identifier org.nvmetrics.installer --version 0.15.0 \
+/usr/bin/pkgbuild --nopayload --identifier org.nvmetrics.installer --version 0.15.1 \
   --scripts "$STAGE/scripts" ${PKG_ARGS[@]+"${PKG_ARGS[@]}"} "$CANDIDATE"
 # Verify the actual package, not just the staging directory.
 NVMETRICS_BUILD_PYTHON="$PYTHON" "$HERE/verify_package.sh" "$CANDIDATE" "$STAGE/scripts/payload.zip"

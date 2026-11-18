@@ -1,4 +1,4 @@
-# NVMetrics 0.15.0 — GPU Caps fases 1, 2C y 3
+# NVMetrics 0.15.1 — GPU Caps fases 1, 2C y 3
 
 Código completo de NVMetrics con el agente y la interfaz integrados. No incluye un nuevo kext. Consulta [arquitectura y evidencia](rm-controller/GPU-CAPS.md).
 
@@ -12,7 +12,7 @@ La compilación e instalación nativas y la validación RUSD fueron confirmadas 
 
 ```bash
 bash PROBAR-FASE3.command
-bash rm-controller/Build.command "$PWD/rm-controller/sources/NVMetrics" "$HOME/gpu-caps-phase2B" "$PWD/release-phase3"
+bash rm-controller/Build.command "$PWD/rm-controller/sources/NVMetrics" "$HOME/gpu-caps-phase2B" "$PWD/release-v0151"
 ```
 
-Usa un directorio de salida nuevo si ya existe el paquete. El resultado es `NVMetrics-0.15.0-Candidate-Intel.pkg`; la prueba previa no instala nada y el paquete no modifica el driver.
+Usa un directorio de salida nuevo si ya existe el paquete. El resultado es `NVMetrics-0.15.1-Candidate-Intel.pkg`; la prueba previa no instala nada y el paquete no modifica el driver. Esta revisión requiere validación nativa; antes de actualizar, selecciona AUTO y verifica su restauración. Conserva los respaldos de 0.15.0.

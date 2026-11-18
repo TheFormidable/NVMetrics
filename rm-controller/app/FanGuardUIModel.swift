@@ -133,7 +133,8 @@ final class FanGuardUIModel: ObservableObject {
                    let rmReason = tx["reason"] as? String {
                     message = "Control finalizado: \(reason). RM: \(rmReason). Comprueba AUTO antes de reintentar."
                 } else {
-                    message = "Control finalizado: \(reason). Comprueba AUTO antes de reintentar."
+                    let trip = data["last_trip"] as? String ?? (data["last_guard_safety"] as? [String: Any])?["reason"] as? String
+                    message = "Control finalizado: \(reason)." + (trip.map { " Motivo: \($0)." } ?? "") + " Comprueba AUTO antes de reintentar."
                 }
             }
         }

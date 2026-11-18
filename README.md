@@ -1,5 +1,9 @@
 # NVMetrics
 
+## Candidato 0.15.1 — interfaz adaptable, icono y rearme supervisado
+
+La 0.15.1 conserva las capacidades GPU Caps y los límites de la 0.15.0. Corrige el tamaño de ventana, añade icono macOS y recupera la disponibilidad de Manual únicamente tras confirmar AUTO por el guard y rescate independiente. La validación nativa de esta revisión está pendiente. [Cambios](rm-controller/CHANGELOG.md).
+
 ## Candidato 0.15.0 — GPU Caps fases 1, 2C y 3
 
 La implementación activa está en [`rm-controller/`](rm-controller/README.md). El candidato Intel fue compilado, instalado y abierto correctamente en macOS 26.7.3 con una RTX 5050 y el driver GPU Caps fase 2B. La monitorización descubre canales disponibles sin depender del nombre comercial. Esto no amplía la autorización de escritura de ventiladores.

@@ -180,7 +180,7 @@ static int policy_cli(int argc, char **argv)
         /* the second line is this revision's marker, which the package installer and build_package.sh look for in
            the agent they are about to install (package_install.py MARKER): 0.14.8 is the first with "policy" */
         fprintf(stderr, "usage: nvmetrics-agent policy [status|idle|normal|undecided]\n"
-                        "NVMETRICS_RM_V0150_CONTINUOUS\n");
+                        "NVMETRICS_RM_V0151_CONTINUOUS\n");
         return 2;
     }
     if (c != POL_STATUS && geteuid() != 0) { fprintf(stderr, "nvmetrics-agent: policy idle/normal/undecided needs root\n"); return 2; }

@@ -4,14 +4,25 @@ import AppKit
 struct MainView: View {
     @EnvironmentObject var agent: Agent
     @EnvironmentObject var controls: Controls
+    @EnvironmentObject var fanGuard: FanGuardUIModel
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         let th = Theme(scheme: scheme)
         let s = agent.latest
         let alerts = Alerts.list(agent.alertReadings, reposo: controls.reposo)
-        VStack(spacing: 16) {
+        VStack(spacing: 8) {
             header(th)
+                .padding(.horizontal, 18).padding(.top, 28)
+            HStack {
+                Text(fanGuard.rmStatus).font(.system(size: 11)).lineLimit(2)
+                Spacer()
+                if fanGuard.active || fanGuard.busy {
+                    Button("Automático") { fanGuard.restoreAuto() }
+                }
+            }.padding(.horizontal, 18)
+            ScrollView {
+            VStack(spacing: 12) {
             if !alerts.isEmpty { alertBlock(alerts, th) }
             if let problem = agent.problem, s == nil {
                 Text(problem).font(.system(size: 13)).foregroundStyle(Theme.warn)
@@ -19,7 +30,8 @@ struct MainView: View {
                     .background(th.panel).clipShape(RoundedRectangle(cornerRadius: 8))
             }
             meters(s, th)
-            HStack(alignment: .top, spacing: 12) {
+            FanGuardCard().fixedSize(horizontal: false, vertical: true)
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 185), spacing: 12, alignment: .top)], spacing: 12) {
                 Card(icon: "thermometer.medium", title: "Temperatura") {
                     InfoLine(name: "Núcleo", value: "\(Fmt.num(s?.temp_gpu_c, 1)) °C")
                     InfoLine(name: "Memoria", value: "\(Fmt.num(s?.temp_mem_c, 1)) °C")
@@ -42,9 +54,7 @@ struct MainView: View {
                 }
                 FanCard()
             }
-            .frame(height: 300)
             FanCurveCard().fixedSize(horizontal: false, vertical: true)
-            FanGuardCard().fixedSize(horizontal: false, vertical: true)
             modes(th)
             HStack(alignment: .top, spacing: 12) {
                 BoostCard().frame(maxWidth: .infinity)
@@ -55,16 +65,22 @@ struct MainView: View {
                 Text(m).font(.system(size: 12)).foregroundStyle(th.text).frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .padding(.horizontal, 22).padding(.top, 34).padding(.bottom, 20)
-        .frame(width: 760)
+            .padding(.horizontal, 18).padding(.vertical, 12)
+            .frame(maxWidth: .infinity)
+            }
+        }
+        .frame(minWidth: 620, minHeight: 360)
         .background(th.background)
         .onAppear { controls.refresh() }
     }
 
     private func header(_ th: Theme) -> some View {
         HStack(spacing: 10) {
-            Image(systemName: "gauge.with.needle.fill").font(.system(size: 26, weight: .bold)).foregroundStyle(Theme.green)
-                .shadow(color: th.glow, radius: 8)
+            if let icon = NSImage(named: "AppIcon") {
+                Image(nsImage: icon).resizable().scaledToFit().frame(width: 40, height: 40)
+            } else {
+                Image(systemName: "gauge.with.needle.fill").font(.system(size: 26, weight: .bold)).foregroundStyle(Theme.green)
+            }
             VStack(alignment: .leading, spacing: 0) {
                 (Text("NV").foregroundStyle(Theme.green) + Text("Metrics").foregroundStyle(th.text))
                     .font(.system(size: 24, weight: .heavy, design: .rounded)).italic()

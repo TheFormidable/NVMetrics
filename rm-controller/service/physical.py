@@ -76,6 +76,9 @@ class Physical:
         # A missing guard event, unknown fault or unverified rescue stays latched.
         return self.thermal_profile and self.failure and self.last_end=='guard_heartbeat_trip_rescue_pending'
 
+    def _recoverable_client_disconnect(self):
+        return self.thermal_profile and self.failure and self.last_end=='client_disconnect_verified_rescue_pending'
+
     def _recoverable_tach(self):
         # Only an absent sample in the low-speed IDLE profile is eligible.
         # Explicit stall/low RPM, C guard faults, thermal trips and rescue
@@ -138,7 +141,7 @@ class Physical:
         return {'active':self.token is not None,'mode':'manual' if self.token else 'auto_or_unverified',
                 'percent':self.pct,'seconds_left':None if self.continuous and self.token else round(left,1),'unlimited_session':self.continuous,'physical_enabled':self.enabled,
                 'safety_profile':self.safety_profile,
-                'one_shot_used':self.used,'rearm_pending':self.used and (self._recoverable_tach() or self._recoverable_thermal() or self._recoverable_heartbeat() or (not self.failure and self.last_end=='user_auto_verified')),
+                'one_shot_used':self.used,'rearm_pending':self.used and (self._recoverable_tach() or self._recoverable_thermal() or self._recoverable_heartbeat() or self._recoverable_client_disconnect() or (not self.failure and self.last_end=='user_auto_verified')),
                 'last_end_reason':self.last_end,
                 'last_trip':self.last_trip,
                 'last_trip_percent':self.last_trip_percent,
@@ -204,7 +207,8 @@ class Physical:
         # conflate "rearm forbidden" with "rescue failed".
         thermal=self._recoverable_thermal()
         heartbeat=self._recoverable_heartbeat()
-        recoverable=self._recoverable_tach() or thermal or heartbeat
+        disconnect=self._recoverable_client_disconnect()
+        recoverable=self._recoverable_tach() or thermal or heartbeat or disconnect
         if self.failure and not recoverable and self.last_end.endswith('_rescue_pending') and self.rescue is not None:
             rc=self.rescue.poll()
             if rc is not None:
@@ -224,7 +228,7 @@ class Physical:
         # An explicit parent EOF normally returns C exit code 12. A C safety
         # fault or RM readback failure could race the tachometer probe; never
         # reinterpret that independent guard failure as a recoverable gap.
-        if recoverable and not thermal and not heartbeat and self.guard.poll()!=12:
+        if recoverable and not thermal and not heartbeat and not disconnect and self.guard.poll()!=12:
             self.last_end='tachometer_missing_guard_fault_rescue_pending'
             self._audit('tachometer_rearm_refused_guard_fault',exit_code=self.guard.poll())
             return
@@ -232,6 +236,8 @@ class Physical:
             self.last_end='thermal_rearm_guard_fault_rescue_pending';return
         if heartbeat and self.guard.poll()!=8:
             self.last_end='heartbeat_rearm_guard_fault_rescue_pending';return
+        if disconnect and self.guard.poll()!=12:
+            self.last_end='client_disconnect_guard_fault_rescue_pending';return
         if self.rescue is None:
             self.failure=True;self.last_end='rescue_missing_restart_service';self._audit('rescue_missing');return
         rescue_rc=self.rescue.poll()
@@ -432,7 +438,7 @@ class Physical:
             raise PhysicalError('unqualified_cooler_layout')
         self._poll_child()
         if self.used or self.token:
-            if self.last_end=='user_auto_verified' or self._recoverable_tach() or self._recoverable_thermal() or self._recoverable_heartbeat():raise PhysicalError('previous_rescue_still_verifying_AUTO')
+            if self.last_end=='user_auto_verified' or self._recoverable_tach() or self._recoverable_thermal() or self._recoverable_heartbeat() or self._recoverable_client_disconnect():raise PhysicalError('previous_rescue_still_verifying_AUTO')
             raise PhysicalError('previous_session_or_rescue_not_safe_to_rearm')
         if not self.idle_ok(status,inspect,self.thermal_profile,continuous=self.continuous):
             reason=self.preflight_rejection(status,inspect,self.thermal_profile,self.continuous)
@@ -713,6 +719,22 @@ class Physical:
         self._poll_child()  # may rearm now if the independent rescue has finished
         return {'mode':'auto','readback_verified':True,'physical_enabled':self.enabled,'last_end_reason':self.last_end}
 
+    def _classify_client_disconnect(self):
+        # A client lease expiry is recoverable only after an explicit clean
+        # native EOF exit with verified AUTO; independent root rescue must
+        # still independently verify AUTO before any new session is allowed.
+        if self.thermal_profile and self.guard and self.guard.poll()==12 and self.guard.stdout:
+            try:
+                events=[json.loads(line) for line in self.guard.stdout.read(8192).splitlines()]
+                if (any(e.get('event')=='termination' and e.get('reason')=='client_disconnected' for e in events)
+                        and any(e.get('event')=='auto_verified' and e.get('pct')==0 for e in events)
+                        and not any(e.get('event') in ('safety_metrics','safety_auto','failure','auto_failed') for e in events)):
+                    self.last_end='client_disconnect_verified_rescue_pending'
+                    self.last_trip='client_lease_expired'
+                    self._audit('client_disconnect_native_auto_verified')
+            except (OSError,ValueError,TypeError,AttributeError):
+                pass
+
     def _close_guard(self):
         if self.guard:
             try:
@@ -745,6 +767,7 @@ class Physical:
             elif self.failure and not self.last_end.endswith('_rescue_pending'):
                 self.last_end=reason+'_rescue_pending'
             self._close_guard()
+            if reason=='client_lease_expired':self._classify_client_disconnect()
 
     def close(self):
         self.stop('server_shutdown')

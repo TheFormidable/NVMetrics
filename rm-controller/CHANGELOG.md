@@ -1,3 +1,10 @@
+# 0.15.1 — candidato de interfaz adaptable y recuperación
+
+- Ventana desplazable y redimensionable con tamaño inicial limitado al espacio visible; tarjetas adaptables y acceso a AUTO fijo en la cabecera.
+- Icono de aplicación con recorte proporcional, margen transparente y recurso ICNS multirresolución generado al construir.
+- Rearme tras pérdida de comunicación solo si el guard nativo termina por EOF explícito, confirma AUTO sin fallo y el rescate independiente verifica AUTO. No se reanuda Manual automáticamente. Fallos no cualificados permanecen bloqueados. Sin cambios de límites, watchdog o escalones.
+- Migración desde 0.15.0 con respaldo separado y comprobación de integridad previa. Pruebas Python sin hardware; compilación, interfaz y recuperación física pendientes en macOS.
+
 # 0.15.0 — Manual continuo (candidato de prueba local)
 
 - Perfil continuo explícito: sin vencimiento de sesión ni de servicio; el guard C, watchdog del cliente y rescate independiente siguen activos. Se mantiene el mínimo de 30%, inicio a 50%, lectura RM y comprobación de tacómetros.
