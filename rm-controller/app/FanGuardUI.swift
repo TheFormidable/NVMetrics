@@ -34,7 +34,6 @@ struct FanGuardCard: View {
     @EnvironmentObject private var fanGuard: FanGuardUIModel
     @Environment(\.colorScheme) private var scheme
     @Environment(\.openWindow) private var openWindow
-    @State private var confirmStart = false
 
     var body: some View {
         let th = Theme(scheme: scheme)
@@ -90,7 +89,7 @@ struct FanGuardCard: View {
                 }
             } else {
                 VStack(alignment: .leading, spacing: 8) {
-                    Button("Activar Manual · 50 %") { confirmStart = true }
+                    Button(fanGuard.busy ? "Verificando… AUTO sigue protegido" : "Activar Manual · 50 %") { fanGuard.begin() }
                         .buttonStyle(.borderedProminent).tint(Theme.greenDim).disabled(!fanGuard.canBegin)
                     Button("Actualizar estado") { fanGuard.refresh() }.disabled(fanGuard.busy)
                     if fanGuard.busy {
@@ -101,16 +100,16 @@ struct FanGuardCard: View {
             }
             Text(fanGuard.continuousProfile ? "Manual continuo 30–100 %. El arranque permanece en 50 %; el programa no baja automáticamente al 30 %. Puedes subir a un valor mayor en una operación, con confirmación RM. Las bajadas requieren escalones verificados. AUTO ante límites térmicos o pérdida de supervisión. Prueba presencial." : fanGuard.thermalProfile ? "Objetivo inicial 30 %. Arranque verificado al 50 %: GPU <60 °C, VRAM <84 °C, ≤60 W. Bajar de 50 %: GPU <58 °C, VRAM <82 °C, ≤50 W y uso ≤20 %. AUTO ante límites térmicos o fallo. No pruebes juegos a baja velocidad todavía." : fanGuard.loadProfile ? "Carga supervisada: Manual 50–100 %. Las reducciones no están habilitadas." : "Sólo inactividad: mínimo 30 %, ambos ventiladores ≥1000 RPM. Nunca uses <50 % jugando.")
                 .font(.system(size: 11)).foregroundStyle(th.label).fixedSize(horizontal: false, vertical: true)
+            if !fanGuard.active {
+                Text("Control físico supervisado: se inicia con una sola pulsación. AUTO, verificación RM, RPM reales y rescate independiente siguen siendo obligatorios.")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(th.label)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             if let text = fanGuard.message {
                 Text(text).font(.system(size: 11)).foregroundStyle(th.label)
                     .fixedSize(horizontal: false, vertical: true)
             }
-        }
-        .confirmationDialog("Ensayo real de ventiladores", isPresented: $confirmStart, titleVisibility: .visible) {
-            Button("Activar Manual al 50 %") { fanGuard.begin() }
-            Button("Cancelar", role: .cancel) { }
-        } message: {
-            Text(fanGuard.loadProfile ? "Prueba de carga EXPERIMENTAL: ambos ventiladores deben girar, los sensores deben responder y AUTO se activará por límites térmicos. Comienza en reposo, supervisa en persona y nunca confíes en recuperación durante un fallo kernel/driver." : "Escritura RM privada. Inicia en reposo con servicio root y supervisión. Sin garantía ante un fallo de driver/kernel.")
         }
         .task {
             while !Task.isCancelled {
