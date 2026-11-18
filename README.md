@@ -4,6 +4,8 @@
 
 Nuevo diseño inspirado en Afterburner: indicadores segmentados, navegación lateral, cuatro estilos persistentes (oscuro, claro, grafito y cristal), paneles adaptables y AUTO accesible durante una sesión manual. No se añaden capacidades de escritura ni se relajan las protecciones. Se mantiene el icono nativo de 0.15.1. La compilación y validación visual en macOS están pendientes.
 
+El repositorio contiene código fuente; los instaladores se construyen localmente o se distribuyen mediante GitHub Releases. Los paquetes históricos conservan su documentación y suma SHA-256.
+
 ## Candidato 0.15.1 — interfaz adaptable, icono y rearme supervisado
 
 La 0.15.1 conserva las capacidades GPU Caps y los límites de la 0.15.0. Corrige el tamaño de ventana, añade icono macOS y recupera la disponibilidad de Manual únicamente tras confirmar AUTO por el guard y rescate independiente. La validación nativa de esta revisión está pendiente. [Cambios](rm-controller/CHANGELOG.md).

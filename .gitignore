@@ -1,3 +1,17 @@
 build/
 *.o
 .DS_Store
+
+# Local build and distribution artifacts (publish installers in releases).
+*.pkg
+*.dmg
+*.app/
+*.xcarchive/
+*.dSYM/
+*.pyc
+__pycache__/
+.build-venv/
+.build-cache/
+.validation/
+/out/
+/release-*/
