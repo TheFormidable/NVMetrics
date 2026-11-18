@@ -93,14 +93,14 @@ for line in sys.stdin:
                     'rpm_min_candidate':1150,'rpm_max_candidate':3700}
             snapshot[name]={'layout_matches_two':True,'records':[record,record]}
         import json
-        self.agent.write_text('#!'+sys.executable+'\\n'+
-            'import json,sys\\n'+
-            'if sys.argv[-1] == "rm-inspect":\\n'+
-            ' print('+repr(json.dumps(snapshot))+',flush=True)\\n'+
-            ' sys.exit(0)\\n'+
+        self.agent.write_text('#!'+sys.executable+'\n'+
+            'import json,sys\n'+
+            'if sys.argv[-1] == "rm-inspect":\n'+
+            ' print('+repr(json.dumps(snapshot))+',flush=True)\n'+
+            ' sys.exit(0)\n'+
             'print(json.dumps({"operation":"guard","event":"entry_refused","pct":0,'
-            '"reason":"critical_sensor_freshness_unverified"}),flush=True)\\n'+
-            'sys.exit(6)\\n')
+            '"reason":"critical_sensor_freshness_unverified"}),flush=True)\n'+
+            'sys.exit(6)\n')
         self.agent.chmod(0o700)
 
     def test_no_write_entry_refusal_rearms_only_after_fresh_rm_auto(self):
