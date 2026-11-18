@@ -10,7 +10,7 @@ Para compilar localmente en macOS Intel, abre `Build.command` desde este directo
 
 La revisión 0.14.9 conserva Manual/AUTO, Eco y Reposo en caliente. Limita Manual a una hora y añade controles de seguridad IPC, rutas privilegiadas fijas y rotación de auditoría. Es experimental: no se ha validado físicamente ni firmado/notarizado para distribución pública. Véase `CHANGELOG.md` y `../SECURITY.md`.
 
-Continuación de `NVMetrics-RM-v0145-complete-source.zip`. **No es todavía una versión certificada como estable en control físico.** Se conserva la base integrada bajo `sources/` y se aplican las correcciones de esta revisión durante la compilación en una copia temporal. Esta entrega se incorpora bajo `rm-controller/` para preservar la implementación previa de la raíz del repositorio. El instalador público anterior está en [`packages/0.14.7/`](../packages/0.14.7/); 0.15.0 se construye localmente con los pasos documentados en [LEEME-GPU-CAPS](../LEEME-GPU-CAPS.md).
+Continuación de `NVMetrics-RM-v0145-complete-source.zip`. **No es todavía una versión certificada como estable en control físico.** Se conserva la base integrada bajo `sources/` y se aplican las correcciones de esta revisión durante la compilación en una copia temporal. La implementación activa se mantiene bajo `rm-controller/`. La copia antigua de `app/` y `agent/` en la raíz se retiró por duplicada; puede consultarse en el historial Git. El instalador 0.14.7 se conserva únicamente en [el historial archivado](https://github.com/TheFormidable/NVMetrics/tree/99e2399493123791ca5482b18907104c7d037d4f/packages/0.14.7); los nuevos paquetes se compilan localmente según [LEEME-GPU-CAPS](../LEEME-GPU-CAPS.md) y se publican como assets de Releases, no en Git.
 
 ## Resultado
 
