@@ -206,8 +206,23 @@ final class FanGuardUIModel: ObservableObject {
                     message = "El modo anterior todavía no se ha verificado como AUTO. Comprueba RM antes de reintentar."
                 } else if refusal == "preflight_telemetry_not_fresh" {
                     message = "Telemetría sin actualizar: no se permite activar Manual."
+                } else if refusal == "guard_entry_critical_sensor_freshness_unverified" ||
+                          refusal == "guard_start_critical_sensor_freshness_unverified" {
+                    message = "El guard rechazó el arranque porque alguna fuente crítica no avanzó. No es un límite de 49 °C. Revisa los campos ts_* y age_* de guard-last.stderr.log."
+                } else if refusal.hasPrefix("guard_entry_") || refusal.hasPrefix("guard_start_") {
+                    message = "El guard rechazó la entrada: " + refusal + ". Comprueba temperaturas, potencia, frescura y log nativo."
                 } else {
                     message = "Manual rechazado: " + refusal
+                }
+                if let detail = r["details"] as? [String: Any],
+                   let sample = detail["sample"] as? [String: Any] {
+                    var reading: [String] = []
+                    if let gpu = (sample["gpu_c"] as? NSNumber)?.doubleValue { reading.append(String(format: "GPU %.1f °C",gpu)) }
+                    if let mem = (sample["mem_c"] as? NSNumber)?.doubleValue { reading.append(String(format: "VRAM %.1f °C",mem)) }
+                    if let power = (sample["power_w"] as? NSNumber)?.doubleValue { reading.append(String(format: "%.1f W",power)) }
+                    if let utilization = sample["util_gpu_pct"] as? Int { reading.append("uso \(utilization) %") }
+                    if sample["fresh"] as? Bool == false { reading.append("telemetría no fresca") }
+                    if !reading.isEmpty { message = (message ?? refusal) + " · Lecturas root: " + reading.joined(separator: ", ") }
                 }
                 busy = false; refresh();return
             }
