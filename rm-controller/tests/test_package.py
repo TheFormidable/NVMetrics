@@ -314,6 +314,42 @@ class TransactionTests(unittest.TestCase):
         self.assertTrue((self.back/'Previous.app').exists())
         self.assertEqual(json.loads(self.receipt.read_text())['version'],'0.15.4')
 
+    def test_missing_gui_with_verified_0153_receipt_is_repaired(self):
+        # An external deletion of the GUI must not strand a correctly
+        # installed and still authenticated root helper.
+        self.simulate_v014('0.15.3')
+        shutil.rmtree(self.app)
+        self.assertEqual(pkg.installed_state(501),'upgrade')
+        pkg.install(self.payload,501)
+        self.assertTrue(self.app.is_dir())
+        self.assertEqual(pkg.installed_state(501),'same')
+        self.assertTrue((self.back/'Runtime/nvmetrics-runtime').exists())
+        self.assertFalse((self.back/'Previous.app').exists())
+        self.assertEqual(json.loads(self.receipt.read_text())['version'],pkg.VERSION)
+
+    def test_missing_gui_same_revision_is_reinstalled(self):
+        pkg.install(self.payload,501)
+        self.back.rename(self.root/'previous-backup')
+        shutil.rmtree(self.app)
+        self.assertEqual(pkg.installed_state(501),'upgrade')
+        pkg.install(self.payload,501)
+        self.assertTrue(self.app.is_dir())
+        self.assertEqual(pkg.installed_state(501),'same')
+
+    def test_missing_gui_does_not_bypass_privileged_integrity(self):
+        self.simulate_v014('0.15.3')
+        shutil.rmtree(self.app)
+        (self.root/'server.py').write_text('tampered root server')
+        with self.assertRaisesRegex(RuntimeError,'installed file changed'):
+            pkg.installed_state(501)
+        self.stop.assert_not_called()
+
+    def test_modified_gui_still_refused(self):
+        self.simulate_v014('0.15.3')
+        (self.app/'unexpected').write_text('modified')
+        with self.assertRaisesRegex(RuntimeError,'installed package differs'):
+            pkg.installed_state(501)
+
     def test_upgrade_handshake_failure_restores_runtime_app_and_receipt(self):
         record=self.simulate_v014()
         self.client.side_effect=RuntimeError('upgrade handshake failed')
