@@ -1,3 +1,11 @@
+# 0.15.6 — entrada a Manual y diagnóstico real de 49 °C
+
+- El perfil térmico existente permite 49–59,9 °C con sensores válidos, AUTO verificado y demás requisitos. Se añaden pruebas C y Python para demostrar que **49 °C no es un límite**; permanecen el máximo estricto de 60 °C y las demás protecciones.
+- El guard nativo registra cada rechazo de entrada con la causa exacta, perfil activo, temperaturas, potencia, utilización y estado/frescura de los cuatro relojes RUSD. El servicio conserva el evento y la GUI muestra el motivo y la lectura de telemetría root.
+- Un rechazo **antes de START 50 y sin rescate armado** ya no inutiliza indefinidamente las sesiones: el servicio cierra el guard, verifica mediante una nueva lectura RM que ambos registros están en AUTO y solo entonces reabre la posibilidad de iniciar. Si existe rescate armado, escritura posible, firmware no AUTO o error de verificación, sigue bloqueado.
+- Añadidas pruebas contra rearme indebido tras RM manual y contra fallos de frescura. No se modifican los límites térmicos, pasos de 5 %, watchdog, rescate ni RM ABI.
+- La revisión requiere una nueva compilación y validación de hardware de la causa específica que se observa al llegar a ~49 °C.
+
 # 0.15.5 — Manual sin bloqueos de interfaz
 
 - Un solo clic solicita el inicio de Manual; sin diálogo redundante. El guard y rescate siguen activos.
