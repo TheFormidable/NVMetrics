@@ -174,6 +174,44 @@ def start_job():
     raise RuntimeError('launchd registration unsuccessful')
 
 
+def retire_verified_latched_service(uid):
+    """Retire an idle daemon holding the session lease after fail-closed rescue.
+
+    This is intentionally narrower than general server restart: a privileged
+    daemon has already disabled new Manual sessions, the independent rescue
+    verified firmware AUTO, and no active/watchdog session remains. The root
+    agent independently checks both regular/default RM records before bootout.
+    Do not force a daemon running Manual or waiting for rescue to exit.
+    """
+    if not loaded():
+        return False
+    client=APP/'Contents/Resources/GuardTools/Runtime/nvmetrics-runtime'
+    p=run(['/usr/bin/sudo','-n','-u',f'#{uid}','--',client,'client','control_status'],15)
+    if p.returncode != 0:
+        return False
+    try:
+        result=json.loads(p.stdout)
+        if result.get('ok') is not True:
+            return False
+        d=result.get('data')
+        if not isinstance(d,dict) or (
+            d.get('active') is not False or
+            d.get('one_shot_used') is not True or
+            d.get('rearm_pending') is not False or
+            d.get('watchdog_armed') is not False or
+            not str(d.get('last_end_reason','')).endswith('_rescue_verified_restart_service')
+        ):
+            return False
+    except (ValueError,TypeError,AttributeError):
+        return False
+    # A status flag is not enough: require a new RM GET proving that BOTH
+    # cooler records and the firmware default are AUTO before daemon bootout.
+    inspect_auto(ROOT/'nvmetrics-agent',qualified=True)
+    print('NVMetrics Installer: verified inactive fail-closed controller and independent rescue AUTO; stopping idle launchd service to release its lease.',flush=True)
+    stop_job()
+    return True
+
+
 def verify_client(uid,qualified=True):
     """Test real on-demand startup as the authorized non-root desktop UID."""
     client=APP/'Contents/Resources/GuardTools/Runtime/nvmetrics-runtime'
@@ -276,11 +314,27 @@ def install(payload, uid):
                 raise RuntimeError('unqualified GPU: refuse migration of existing privileged controller')
         if state=='same':
             start_job();verify_client(uid,False) if not qualified else verify_client(uid);print('NVMetrics package already verified');return
-        # Acquire the physical lease BEFORE bootout; prevent new manual starts.
-        for path in base.LOCKS[1:]: held.append(acquire(path))
+        # Normally acquire physical locks BEFORE bootout, so a Manual owner
+        # cannot lose its guard. Exception: a verified post-fault daemon may
+        # retain the lease forever intentionally. It cannot start Manual again,
+        # and the rescue has independently verified AUTO. Only then is a
+        # controlled bootout safe, followed by re-acquisition of BOTH locks.
+        try:
+            for path in base.LOCKS[1:]: held.append(acquire(path))
+        except RuntimeError as exc:
+            for fd in reversed(held): os.close(fd)
+            held.clear()
+            session_busy=str(exc).startswith('installer_lock_busy:'+str(base.LOCKS[1]))
+            if not (state=='upgrade' and session_busy and retire_verified_latched_service(uid)):
+                raise
+            was_loaded=True
+            stopped=True
+            for path in base.LOCKS[1:]: held.append(acquire(path))
         if state in ('legacy','upgrade'): inspect_auto(ROOT/'nvmetrics-agent',qualified=True)
-        was_loaded=loaded()
-        if was_loaded: stopped=True;stop_job()
+        if loaded():
+            was_loaded=True
+            stopped=True
+            stop_job()
         held.append(acquire(ROOT/'control.lock'))
         if qualified:inspect_auto(agent,qualified=True)
         if state in ('legacy','upgrade'): inspect_auto(ROOT/'nvmetrics-agent',qualified=True)
