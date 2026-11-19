@@ -23,6 +23,27 @@ class LowerTransition(unittest.TestCase):
         return self.p.lower_percent(501,self.p.token,pct,probe=Mock(side_effect=values),inspect={'mode':'manual'})
     def writes(self):
         return [c.args[0] for c in self.p._send.call_args_list if c.args[0].startswith(('LOWER ','RAISE '))]
+    def test_direct_descent_checks_target_once(self):
+        self.p.pct=100
+        self.assertEqual(self.call(30,[{**GOOD,'rpm':[3700,3700]}]+[GOOD]*3)['percent'],30)
+        self.assertEqual(self.writes(),['LOWER 30']);self.p.stop.assert_not_called()
+    def test_direct_descent_rejects_invalid_target_or_profile(self):
+        self.p.pct=80
+        for target in (25,31,80,85,101):
+            with self.subTest(target=target), self.assertRaisesRegex(PhysicalError,'lower_invalid_target_or_profile'):
+                self.call(target,[])
+        self.p.thermal_profile=False
+        with self.assertRaisesRegex(PhysicalError,'lower_invalid_target_or_profile'):
+            self.call(30,[])
+        self.p.load_profile=True
+        with self.assertRaisesRegex(PhysicalError,'lower_not_permitted_in_load_profile'):
+            self.call(30,[])
+        self.assertEqual(self.writes(),[])
+    def test_direct_descent_tach_failure_requests_auto(self):
+        self.p.pct=100
+        with self.assertRaisesRegex(PhysicalError,'low_calibration_failed_AUTO_requested'):
+            self.call(30,[{**GOOD,'rpm':[3700,3700]},{**GOOD,'rpm':[0,1600]}])
+        self.assertEqual(self.writes(),['LOWER 30']);self.p.stop.assert_called_once_with('low_calibration_failed')
     def test_real_preflight_peak_retries_before_writing(self):
         self.p.pct=40
         self.assertEqual(self.call(35,[PRE_PEAK,GOOD,GOOD,GOOD,GOOD])['percent'],35)

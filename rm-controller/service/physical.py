@@ -646,7 +646,7 @@ class Physical:
         return self.status()
 
     def lower_percent(self,uid,token,pct,probe=None,inspect=None):
-        """Guarded lower step: 50→45→...→30, with live tach verification.
+        """Guarded direct reduction to the selected target, with live tach verification.
 
         A successful RM GET is not proof that a fan motor keeps spinning.
         Only a bounded electrical/utilization excursion can be retried; a
@@ -656,8 +656,8 @@ class Physical:
         self._validate(uid,token)
         if self.load_profile:
             raise PhysicalError('lower_not_permitted_in_load_profile')
-        if not (type(pct) is int and MANUAL_FLOOR <= pct <= (95 if self.thermal_profile else 45) and pct % 5 == 0 and pct == self.pct - 5):
-            raise PhysicalError('lower_only_one_5_percent_step_from_50')
+        if not (type(pct) is int and MANUAL_FLOOR <= pct < self.pct <= 100 and pct % 5 == 0 and self.pct % 5 == 0 and (self.thermal_profile or self.pct <= 50)):
+            raise PhysicalError('lower_invalid_target_or_profile')
         if not callable(probe):raise PhysicalError('lower_needs_live_tach_probe')
         if inspect is None or inspect.get('mode')!='manual':
             raise PhysicalError('lower_requires_verified_manual_rm')

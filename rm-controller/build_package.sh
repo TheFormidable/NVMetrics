@@ -4,7 +4,7 @@ set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd -P)"
 REPO="${1:-$HERE/sources/NVMetrics}"
 DRIVER="${2:-$HERE/sources/nvidia-macos-driver}"
-OUT="${3:-$HOME/Desktop/NVMetrics-v0158-release}"
+OUT="${3:-$HOME/Desktop/NVMetrics-v0159-release}"
 [[ $(uname -s) == Darwin && $(uname -m) == x86_64 ]] || { echo 'Run on Intel macOS.' >&2; exit 2; }
 source "$HERE/find_build_python.sh"
 PYTHON="$(find_build_python)" || { echo 'No compatible build Python; run Build.command.' >&2; exit 2; }
@@ -40,10 +40,10 @@ done
 test -s "$APP/Contents/Resources/AppIcon.icns"
 AGENT="$APP/Contents/Resources/nvmetrics-agent"
 test -x "$AGENT"
-strings "$AGENT" | grep 'NVMETRICS_RM_V0158_CONTINUOUS' >/dev/null
+strings "$AGENT" | grep 'NVMETRICS_RM_V0159_CONTINUOUS' >/dev/null
 # The root guard must carry the RUSD flight recorder and its instrumented reader (diagnostic, 0.15.7).
 strings "$AGENT" | grep 'NVMETRICS_RM_V0157_RUSD_FLIGHT_RECORDER' >/dev/null
-# 0.15.8: the guard's RUSD retry busy-waits; it must not contain the sleeping retry of 0.15.7.
+# 0.15.9: the guard's RUSD retry busy-waits; it must not contain the sleeping retry of 0.15.7.
 strings "$AGENT" | grep 'NVMETRICS_RM_V0158_RUSD_SPIN_RETRY' >/dev/null
 # Idle mode for the apps already open needs the "policy" command built against the driver's boost-policy header.
 # Without the header the agent still builds and answers {"policy":null,"why":"build"}: stop here instead.
@@ -73,7 +73,7 @@ chmod +x "$GUARD/Runtime/nvmetrics-runtime"
 import plistlib,sys
 from pathlib import Path
 p=Path(sys.argv[1]);obj=plistlib.loads(p.read_bytes())
-obj['CFBundleShortVersionString']='0.15.8';obj['CFBundleVersion']='0.15.8'
+obj['CFBundleShortVersionString']='0.15.9';obj['CFBundleVersion']='0.15.9'
 obj['CFBundleIconFile']='AppIcon.icns'
 p.write_bytes(plistlib.dumps(obj))
 PY
@@ -107,12 +107,12 @@ PY
 "$PYTHON" -B "$HERE/verify_package_payload.py" render "$STAGE/scripts"
 echo 'Checking native ZIP round-trip before pkgbuild…'
 NVMETRICS_BUILD_PYTHON="$PYTHON" "$HERE/verify_scripts.sh" "$STAGE/scripts" "$STAGE/roundtrip" "$STAGE/payload"
-PKG="$OUT/NVMetrics-0.15.8-Candidate-Intel.pkg"
+PKG="$OUT/NVMetrics-0.15.9-Candidate-Intel.pkg"
 [[ ! -e "$PKG" ]] || { echo 'Output package already exists; choose a new directory.' >&2; exit 2; }
 CANDIDATE="$STAGE/candidate.pkg"
 PKG_ARGS=()
 if [[ -n "${NVMETRICS_INSTALLER_IDENTITY:-}" ]]; then PKG_ARGS=(--sign "$NVMETRICS_INSTALLER_IDENTITY"); fi
-/usr/bin/pkgbuild --nopayload --identifier org.nvmetrics.installer --version 0.15.8 \
+/usr/bin/pkgbuild --nopayload --identifier org.nvmetrics.installer --version 0.15.9 \
   --scripts "$STAGE/scripts" ${PKG_ARGS[@]+"${PKG_ARGS[@]}"} "$CANDIDATE"
 # Verify the actual package, not just the staging directory.
 NVMETRICS_BUILD_PYTHON="$PYTHON" "$HERE/verify_package.sh" "$CANDIDATE" "$STAGE/scripts/payload.zip"

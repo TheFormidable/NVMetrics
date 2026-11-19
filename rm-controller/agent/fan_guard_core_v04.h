@@ -102,14 +102,18 @@ static inline int nvm_guard_raise(struct nvm_guard_state *s, unsigned pct, uint6
         !nvm_guard_elapsed_ok(now,s->began_ms)) return 0;
     s->percent=pct; return 1;
 }
-/* Only one downward 5-percent step from 50% or lower, with safe idle sample.
+/* Direct downward target on the 5-percent selection grid, with a safe sample.
  * All load-profile lowering is forbidden (including if load happens to be 0%).
  * The caller commits this ONLY AFTER verified RM SET/GET readback. */
+static inline int nvm_guard_lower_target(const struct nvm_guard_state *s, unsigned pct) {
+    return s && s->active && !nvm_guard_load_profile &&
+        (s->percent<=50 || nvm_guard_thermal_profile) && s->percent<=100 &&
+        s->percent%5u==0 && pct%5u==0 &&
+        pct>=NVM_GUARD_UNCALIBRATED_FLOOR && pct<s->percent;
+}
 static inline int nvm_guard_can_lower(const struct nvm_guard_state *s,
     struct nvm_guard_sample sample, unsigned pct, uint64_t now) {
-    return s && s->active && !nvm_guard_load_profile && (s->percent<=50 || nvm_guard_thermal_profile) &&
-        s->percent>=NVM_GUARD_UNCALIBRATED_FLOOR+5u &&
-        pct>=NVM_GUARD_UNCALIBRATED_FLOOR && pct+5u==s->percent &&
+    return nvm_guard_lower_target(s,pct) &&
         nvm_guard_elapsed_ok(now,s->began_ms) &&
         (nvm_guard_thermal_profile && pct<50 ? nvm_guard_thermal_entry(sample,1) :
          nvm_guard_ok_sample(sample,!(nvm_guard_thermal_profile && pct>=50)));

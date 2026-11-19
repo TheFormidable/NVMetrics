@@ -311,6 +311,10 @@ int main(int argc, char **argv)
     assert(r.code == 0 && r.sets == 2 && r.restores == 1); ALL_OK(r);
     assert(strstr(r.fr, "\"kind\":\"session_begin\"") && !strstr(r.fr, "\"kind\":\"dump_begin\""));
     assert(strstr(r.fr, "\"first_anomaly\":null") && count(r.fr, "\"event\":\"manual_verified\"") == 2);
+    /* Direct target: three manual SETs total, with no intermediate descent. */
+    run("direct_lower", (struct script){ F_NONE, 0, NEVER, NEVER, 0 }, pings("START 50\nRAISE 100\nLOWER 30\n", 8, "AUTO\n"), &r);
+    assert(r.code == 0 && r.sets == 3 && r.restores == 1); ALL_OK(r);
+    assert(strstr(r.fr, "\"event\":\"manual_verified\",\"pct\":30") && count(r.fr, "\"event\":\"manual_verified\"") == 3);
     /* 2 GPU timestamp == 0 (producer says not available) while Manual 30..: immediate AUTO */
     run("gpu_ts_zero", (struct script){ F_TS_ZERO, 1u << NVM_FR_GPU, 30, NEVER, 0 }, pings("START 50\n", 20, ""), &r);
     TRIPPED_WITH(r, "\"rusd_cause\":\"gpu:ts_zero_producer_invalid\""); ALL_OK(r);

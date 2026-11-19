@@ -1,3 +1,9 @@
+# 0.15.9 — ajuste directo de ventiladores
+
+- Aplicar un destino inferior envía un único `manual_lower` / `LOWER` (p. ej. 100→30), sin recorrer incrementos de 5 puntos. Se conserva la cuadrícula de selección, el arranque al 50 % y el mínimo de 30 %.
+- Se mantienen preflight, RM SET/GET, tres muestras válidas consecutivas de ambos tacómetros, límites de cada perfil, heartbeat, watchdog y rescate. Un fallo puede rechazar el cambio, recuperar un porcentaje superior verificado o solicitar AUTO.
+- Incluye los cambios RUSD de 0.15.8; la migración desde 0.15.8 conserva sus respaldos. Pendiente de validación física en macOS.
+
 # 0.15.8 — reintento RUSD sin espera (fallo reproducido en RTX 5050)
 
 - El Flight Recorder reprodujo el fallo en hardware: `first_ok=0`, `first_cause=write_in_progress`, `retries=0`, `retry_us=13388`. El `nanosleep(250 µs)` del reintento, en un guard con QoS de fondo, volvió tras 13,4 ms; el presupuesto de 2 ms se agotó antes del primer reintento y el guard volvió a AUTO por una colisión de lectura transitoria.

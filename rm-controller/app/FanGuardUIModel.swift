@@ -231,8 +231,8 @@ final class FanGuardUIModel: ObservableObject {
             if autoRequested { busy = false; restoreAuto(); return }
             rearmWatch?.cancel();rearmWatch = nil
             // START 50 is the native guard's tested entry point. Leave the GPU
-            // at the verified 50% instead of silently descending to 30% in
-            // several slow, safety-checked steps. A lower target is applied
+            // at the verified 50% instead of silently descending to 30%.
+            // A lower target is applied
             // only after the user explicitly requests it.
             targetPercent = currentPercent
             busy = false
@@ -298,40 +298,24 @@ final class FanGuardUIModel: ObservableObject {
             await reconcile(initial["error"] as? String ?? "Heartbeat perdido"); return false
         }
         applyStatus(initial)
-        for _ in 0..<15 {
-            guard !autoRequested && active && session == token && available && readbackConfirmed else { return false }
-            if currentPercent == requested { return true }
-            guard let step = FanSelectionPolicy.nextStep(current: currentPercent, target: requested, floor: manualFloor,
-                                                        load: loadProfile, thermal: thermalProfile) else { return false }
-            let lower = step < currentPercent
-            message = "Aplicando \(requested) % · verificando \(step) %…"
-            let reply = await queryIPC([lower ? "manual_lower" : "manual_raise", token, String(step)])
-            guard (reply["ok"] as? Bool) == true else {
-                let reason = reply["error"] as? String ?? "Sin respuesta IPC"
-                lowMarginRefused = ["lower_thermal_margin_insufficient_no_write", "lower_recovered_verified_higher"].contains(reason)
-                await reconcile(reason, details: reply["details"] as? [String: Any])
-                return false
-            }
-            applyStatus(reply)
-            guard active && session == token && readbackConfirmed && currentPercent == step else {
-                await reconcile("RM no confirmó el escalón solicitado"); return false
-            }
-            if currentPercent == requested { return !autoRequested }
-            if autoRequested { return false }
-            // Lower already has three tach samples. Keep the heartbeat alive
-            // between steps and leave a short stabilization interval.
-            await pause(700_000_000)
-            if autoRequested { return false }
-            let keepalive = await queryIPC(["manual_heartbeat", token])
-            guard (keepalive["ok"] as? Bool) == true else {
-                await reconcile(keepalive["error"] as? String ?? "Heartbeat perdido"); return false
-            }
-            applyStatus(keepalive)
-            guard active && session == token && readbackConfirmed && currentPercent == step else {
-                await reconcile("El escalón verificado cambió durante la transición"); return false
-            }
+        guard !autoRequested && active && session == token && available && readbackConfirmed else { return false }
+        if currentPercent == requested { return true }
+        guard let target = FanSelectionPolicy.nextStep(current: currentPercent, target: requested, floor: manualFloor,
+                                                       load: loadProfile, thermal: thermalProfile) else { return false }
+        let lower = target < currentPercent
+        message = "Aplicando y verificando \(target) %…"
+        let reply = await queryIPC([lower ? "manual_lower" : "manual_raise", token, String(target)])
+        guard (reply["ok"] as? Bool) == true else {
+            let reason = reply["error"] as? String ?? "Sin respuesta IPC"
+            lowMarginRefused = ["lower_thermal_margin_insufficient_no_write", "lower_recovered_verified_higher"].contains(reason)
+            await reconcile(reason, details: reply["details"] as? [String: Any])
+            return false
         }
-        return false
+        applyStatus(reply)
+        guard active && session == token && readbackConfirmed && currentPercent == target else {
+            await reconcile("RM no confirmó el porcentaje solicitado"); return false
+        }
+        return !autoRequested
     }
 
     func applySelection() {
@@ -351,7 +335,7 @@ final class FanGuardUIModel: ObservableObject {
     func restoreAuto() {
         guard !ending else { return }
         // The user can cancel even while START has not returned its session token.
-        if busy { autoRequested = true; message = "AUTO solicitado · finalizando el escalón en curso…"; return }
+        if busy { autoRequested = true; message = "AUTO solicitado · finalizando el ajuste en curso…"; return }
         guard let token = session else { return }
         ending = true;busy = true
         autoRequested = false

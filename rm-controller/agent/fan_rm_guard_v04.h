@@ -661,7 +661,7 @@ static int nvm_v04_guard_cli(void)
             /* A changing preflight can reject a valid step without any SET.
              * Keep the last verified speed, only if the active sample is safe. */
             if(!nvm_guard_can_lower(&state,sample,pct,now)){
-                if(nvm_guard_thermal_profile && pct>=30 && pct+5u==state.percent &&
+                if(nvm_guard_thermal_profile && nvm_guard_lower_target(&state,pct) &&
                    nvm_guard_ok_sample(sample,0)){
                     nvm_v04_event("lower_refused",state.percent,"lower_requires_idle_and_two_spinning_fans");
                     continue;
