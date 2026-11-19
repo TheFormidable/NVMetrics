@@ -21,6 +21,9 @@ ROOT=Path('/Library/PrivilegedHelperTools/org.nvmetrics.rmguard')
 LEASE=Path('/var/run/nvmetrics-rm-v05-session.lock')
 MAX_MANUAL_SECONDS=3600
 RESCUE_DELAY_SECONDS=MAX_MANUAL_SECONDS+15
+# Root-only JSONL written by the C guard's RUSD flight recorder (diagnostic only).
+FLIGHT_LOG='rusd-flight.jsonl'
+FLIGHT_MAX_BYTES=8*1024*1024
 
 class PhysicalError(ValueError):
     def __init__(self,message,*,sample=None,requested=None,applied=None):
@@ -108,6 +111,36 @@ class Physical:
         finally:
             if fd>=0:os.close(fd)
 
+    def _open_flight_log(self):
+        """Append-only, root-only sink for the guard's RUSD flight recorder.
+        Diagnostic only: any problem disables the sink (the guard then keeps a
+        one-line summary in guard-last.stderr.log), it never blocks a session.
+        Returns an fd the guard may inherit, or None."""
+        path=ROOT/FLIGHT_LOG
+        flags=os.O_WRONLY|os.O_APPEND|os.O_CREAT|getattr(os,'O_NOFOLLOW',0)|getattr(os,'O_CLOEXEC',0)
+        fd=-1
+        try:
+            fd=os.open(path,flags,0o600)
+            st=os.fstat(fd)
+            if not stat.S_ISREG(st.st_mode) or st.st_uid!=os.geteuid() or st.st_nlink!=1 or st.st_mode&0o077:
+                os.close(fd);fd=-1
+                self._audit('rusd_flight_log_refused',reason='unsafe_file')
+                return None
+            # Bound the log; keep the previous generation for the audit bundle.
+            if st.st_size>FLIGHT_MAX_BYTES:
+                os.close(fd);fd=-1
+                os.replace(path,path.with_suffix('.jsonl.1'))
+                fd=os.open(path,flags|os.O_EXCL,0o600)
+            if fd>255:  # the guard accepts 3..255 only
+                os.close(fd);fd=-1
+                return None
+            result,fd=fd,-1
+            return result
+        except OSError:
+            return None
+        finally:
+            if fd>=0:os.close(fd)
+
     def watchdog_tick(self):
         """Only the running privileged server can keep the independent rescue armed.
         Server blocking/death stops these bytes; rescue then verifies/restores AUTO.
@@ -189,7 +222,10 @@ class Physical:
                 if found is not None:
                     detail=str(found.get('reason','unspecified'))[:80]
                     break
-            self._audit('guard_terminated_unexpected',exit_code=self.guard.returncode,detail=detail)
+            safety=next((ev for ev in guard_events if ev.get('event')=='safety_metrics'),None) or {}
+            rusd_cause=safety.get('rusd_cause')
+            self._audit('guard_terminated_unexpected',exit_code=self.guard.returncode,detail=detail,
+                        rusd_cause=str(rusd_cause)[:80] if rusd_cause is not None else None)
             self.token=None;self.pct=0;self.failure=True
             self.last_end='guard_terminated_'+detail+'_rescue_pending'
             if (self.thermal_profile and self.guard.returncode==8 and detail in
@@ -515,14 +551,24 @@ class Physical:
                 self.guard_log=os.fdopen(log_fd,'wb',buffering=0);log_fd=-1
             finally:
                 if log_fd>=0:os.close(log_fd)
-            self.guard=subprocess.Popen([str(self.agent),'fan','rm-guard'],
-                                        stdin=subprocess.PIPE,stdout=subprocess.PIPE,
-                                        stderr=self.guard_log,bufsize=0,
-                                        env={'PATH':'/usr/bin:/bin','HOME':'/var/root','LANG':'C',
-                                             'NVMETRICS_FAN_GUARD':'ACEPTO_GUARD_V04',
-                                             **({'NVMETRICS_RM_THERMAL_SUPERVISOR':'USER_AUTHORIZED_V0141'} if self.thermal_profile else {}),
-                                             **({'NVMETRICS_RM_CONTINUOUS':'USER_AUTHORIZED_V0150'} if self.continuous else {}),
-                                             **({'NVMETRICS_RM_LOAD_TEST':'USER_AUTHORIZED_V10'} if self.load_profile else {})})
+            # RUSD flight recorder: inherited append-only fd + run_id for correlation
+            # with controller-events.jsonl. Never a path the guard opens itself.
+            flight_fd=self._open_flight_log()
+            try:
+                self.guard=subprocess.Popen([str(self.agent),'fan','rm-guard'],
+                                            stdin=subprocess.PIPE,stdout=subprocess.PIPE,
+                                            stderr=self.guard_log,bufsize=0,
+                                            pass_fds=(flight_fd,) if flight_fd is not None else (),
+                                            env={'PATH':'/usr/bin:/bin','HOME':'/var/root','LANG':'C',
+                                                 'NVMETRICS_FAN_GUARD':'ACEPTO_GUARD_V04',
+                                                 **({'NVMETRICS_RUSD_FR_FD':str(flight_fd),'NVMETRICS_RUSD_FR_RUN':self.run_id}
+                                                    if flight_fd is not None else {}),
+                                                 **({'NVMETRICS_RM_THERMAL_SUPERVISOR':'USER_AUTHORIZED_V0141'} if self.thermal_profile else {}),
+                                                 **({'NVMETRICS_RM_CONTINUOUS':'USER_AUTHORIZED_V0150'} if self.continuous else {}),
+                                                 **({'NVMETRICS_RM_LOAD_TEST':'USER_AUTHORIZED_V10'} if self.load_profile else {})})
+            finally:
+                if flight_fd is not None:os.close(flight_fd)  # the guard holds its own inherited copy
+            self._audit('rusd_flight_recorder',sink=flight_fd is not None,log=FLIGHT_LOG)
             ev=self._read_event(6)
             if ev.get('event')!='ready':
                 reason=str(ev.get('reason','unknown'))[:80]

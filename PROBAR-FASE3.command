@@ -7,4 +7,4 @@ xcrun swiftc -swift-version 5 -o "$W/test-profile" rm-controller/app/Sample.swif
 "$W/test-profile"
 bash PROBAR-FASE2C.command "$@"
 echo 'Phase 3 model verification complete. To build the complete app package, run:'
-echo 'bash rm-controller/Build.command "$PWD/rm-controller/sources/NVMetrics" "$HOME/gpu-caps-phase2B" "$PWD/release-v0156"'
+echo 'bash rm-controller/Build.command "$PWD/rm-controller/sources/NVMetrics" "$HOME/gpu-caps-phase2B" "$PWD/release-v0158"'

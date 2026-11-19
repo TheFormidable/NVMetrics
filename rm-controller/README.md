@@ -1,4 +1,8 @@
-# NVMetrics 0.15.6 — Diagnóstico de entrada RM y reintento seguro
+# NVMetrics 0.15.8 — reintento RUSD sin espera y Flight Recorder
+
+La revisión 0.15.8 corrige el reintento de lectura RUSD que reprodujo el fallo en la RTX 5050: el reintento ya no usa `nanosleep()` (que llegó a tardar 13,4 ms y dejó 0 reintentos), sino un primer intento inmediato y espera activa acotada a 2 ms. No cambia el control físico. Véase [RUSD-FLIGHT-RECORDER.md](RUSD-FLIGHT-RECORDER.md).
+
+La revisión 0.15.7 añade al guard root un registrador de diagnóstico RUSD (`rusd-flight.jsonl`, escrito solo después de AUTO verificado) y una relectura acotada del seqlock. No cambia límites, RM SET/GET, watchdog ni rescate. No declara resuelto el fallo intermitente de `gpu_ts_ok`; véase [RUSD-FLIGHT-RECORDER.md](RUSD-FLIGHT-RECORDER.md).
 
 El icono conserva el diseño Apple/NVIDIA metálico aportado por el usuario, sin fondo negro exterior y con tamaño equilibrado; el instalador actualiza desde 0.15.3 sin modificar el driver. El panel Carbon contiene Resumen, Ventiladores, Diagnóstico y Ajustes. Sólo muestra lecturas reales del agente; no implementa voltaje, overclock, límites editables ni perfiles ficticios. Los cuatro estilos se guardan localmente. La curva recomendada sigue siendo consultiva y el control manual mantiene sus protecciones y pasos de 5 puntos. La revisión requiere validación nativa.
 
@@ -14,7 +18,7 @@ Continuación de `NVMetrics-RM-v0145-complete-source.zip`. **No es todavía una 
 
 ## Resultado
 
-- Instalador candidato `NVMetrics-0.15.6-Candidate-Intel.pkg`, para macOS x86_64, mínimo declarado macOS 14 (GPU Caps 0.15.0 probado en 26.7.3).
+- Instalador candidato `NVMetrics-0.15.8-Candidate-Intel.pkg`, para macOS x86_64, mínimo declarado macOS 14 (GPU Caps 0.15.0 probado en 26.7.3).
 - Aplicación SwiftUI, agente C y servicio/rescate/cliente Python congelados con PyInstaller 6.22.3. El usuario final no necesita Python, Homebrew, Xcode ni descargar paquetes.
 - Se requiere el driver NullMoth compatible, ya instalado. Este paquete no instala ni modifica el driver.
 - Se mantiene la restricción de la base a una sola RTX 5050 y al diseño RM observado de dos ventiladores, con candidatos de límites RPM 1150/3700. No se amplía a otros modelos.
@@ -74,7 +78,7 @@ La descarga inicial de encabezados NVIDIA requiere red. Se reutilizan los tags d
 
 ```sh
 NVMETRICS_BUILD_PYTHON="$PWD/.build-venv/bin/python" \
-  ./verify_package.sh /ruta/NVMetrics-0.15.6-Candidate-Intel.pkg
+  ./verify_package.sh /ruta/NVMetrics-0.15.8-Candidate-Intel.pkg
 ```
 
 ## Validación y límites
