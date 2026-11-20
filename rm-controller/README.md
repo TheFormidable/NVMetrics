@@ -1,4 +1,8 @@
-# NVMetrics 0.15.0 — candidato de Manual continuo para Intel
+# NVMetrics 0.16.0 — candidato de robustez y diagnóstico para Intel
+
+La revisión incorpora Doctor y recuperación del agente sin rediseñar el dashboard. `Build.command` genera `NVMetrics-0.16.0-Candidate-Intel.pkg` en `~/Desktop/NVMetrics-v0160-release`. La migración verificada desde 0.15.0 mantiene las copias antiguas y requiere AUTO comprobado. Consulta [ROG-REFERENCE.md](ROG-REFERENCE.md). Aún no hay compilación ni ensayos físicos de esta revisión.
+
+## Base histórica 0.15.0 — Manual continuo
 
 **GPU Caps integrado (fases 1, 2C y 3).** Compilación e instalación confirmadas por el usuario el 17 de noviembre de 2026 en macOS 26.7.3 Intel. El driver fase 2B aporta capacidades cacheadas; el agente descubre canales RUSD y la GUI muestra los slots realmente observados. Véase [GPU-CAPS.md](GPU-CAPS.md). La lectura no autoriza escritura y no se han cambiado los pasos de 5%.
 

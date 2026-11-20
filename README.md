@@ -1,5 +1,9 @@
 # NVMetrics
 
+## Candidato 0.16.0 — robustez y diagnóstico
+
+La rama de desarrollo conserva el dashboard actual y toma [rog-control-macos](https://github.com/thanhnndev/rog-control-macos) como referencia funcional. Incluye Doctor de solo lectura, reinicio generacional del agente de telemetría, recuperación del monitor al despertar y plazos IPC absolutos. No modifica la autorización, los límites térmicos ni el guard de Manual. Pendiente de compilación y validación física en macOS Intel. Véase [plan técnico y validación](rm-controller/ROG-REFERENCE.md).
+
 ## Candidato 0.15.0 — GPU Caps fases 1, 2C y 3
 
 La implementación activa está en [`rm-controller/`](rm-controller/README.md). El candidato Intel fue compilado, instalado y abierto correctamente en macOS 26.7.3 con una RTX 5050 y el driver GPU Caps fase 2B. La monitorización descubre canales disponibles sin depender del nombre comercial. Esto no amplía la autorización de escritura de ventiladores.

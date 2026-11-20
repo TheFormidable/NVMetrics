@@ -21,12 +21,12 @@ import time
 import install_v012 as base
 from protocol import parse_agent
 
-VERSION = '0.15.0'
+VERSION = '0.16.0'
 ROOT = base.ROOT
 APP = Path('/Applications/NVMetrics.app')
 RUNTIME = ROOT/'Runtime'
 RECEIPT = ROOT/'.v014-package.json'
-BACK = ROOT/'.v0150-package-backup'
+BACK = ROOT/'.v0160-package-backup'
 FILES = ('server.py','backend.py','peer.py','physical.py','rescue.py','protocol.py','launchd_socket.py','nvmetrics-agent','nvmetrics-setting.sh')
 LEGACY = {
     'server.py':'aa833add4bd6377672441802fce5d38d9226862a98ca1b272e9e22e99378d64b',
@@ -37,7 +37,8 @@ LEGACY = {
     'protocol.py':'0b385a66267e1fec6f781b29c57e1fab0556b8bdaf3a5c6d8590b10f9527643e',
     'launchd_socket.py':'3f5645aaf924af8536586772a68c8e671418ad9b6797d2744233a38fdaaf8bf5',
 }
-MARKER = b'NVMETRICS_RM_V0150_CONTINUOUS'
+MARKER = b'NVMETRICS_RM_V0160_DIAGNOSTICS'
+V0150_MARKER = b'NVMETRICS_RM_V0150_CONTINUOUS'
 V0149_MARKER = b'NVMETRICS_RM_V0149_AUDIT_HARDENING'
 V0148_MARKER = b'NVMETRICS_RM_V0148_BOOST_POLICY'
 SESSION_MARKER = b'NVMETRICS_RM_V0147_SESSION_READER'
@@ -185,19 +186,19 @@ def installed_state(uid):
     if RECEIPT.exists():
         base.safe_file(RECEIPT)
         record=json.loads(RECEIPT.read_text())
-        if record.get('version') not in ('0.14.0','0.14.1','0.14.2','0.14.3','0.14.4','0.14.5','0.14.6','0.14.7','0.14.8','0.14.9',VERSION) or record.get('uid')!=uid:
+        if record.get('version') not in ('0.14.0','0.14.1','0.14.2','0.14.3','0.14.4','0.14.5','0.14.6','0.14.7','0.14.8','0.14.9','0.15.0',VERSION) or record.get('uid')!=uid:
             raise RuntimeError('different installed package/authorized user')
         base.safe_file(base.PLIST)
         if sha(base.PLIST)!=record['plist'] or tree_digest(RUNTIME)!=record['runtime'] or tree_digest(APP)!=record['app']:
             raise RuntimeError('installed package differs; do not overwrite')
         for n in FILES:
-            if n=='nvmetrics-setting.sh' and record.get('version') not in ('0.14.9',VERSION):continue
+            if n=='nvmetrics-setting.sh' and record.get('version') not in ('0.14.9','0.15.0',VERSION):continue
             base.safe_file(ROOT/n)
             if sha(ROOT/n)!=record['files'][n]: raise RuntimeError('installed file changed:'+n)
         if record.get('version')==VERSION:return 'same'
-        expected_marker = {'0.14.0':LEGACY_MARKER,'0.14.3':ADAPTIVE_MARKER,'0.14.4':ADAPTIVE_MARKER,'0.14.5':ADAPTIVE_MARKER,'0.14.6':FRESHNESS_MARKER,'0.14.7':SESSION_MARKER,'0.14.8':V0148_MARKER,'0.14.9':V0149_MARKER}.get(record.get('version'),PREVIOUS_MARKER)
+        expected_marker = {'0.14.0':LEGACY_MARKER,'0.14.3':ADAPTIVE_MARKER,'0.14.4':ADAPTIVE_MARKER,'0.14.5':ADAPTIVE_MARKER,'0.14.6':FRESHNESS_MARKER,'0.14.7':SESSION_MARKER,'0.14.8':V0148_MARKER,'0.14.9':V0149_MARKER,'0.15.0':V0150_MARKER}.get(record.get('version'),PREVIOUS_MARKER)
         if expected_marker not in (ROOT/'nvmetrics-agent').read_bytes():raise RuntimeError('wrong previous agent')
-        if BACK.exists():raise RuntimeError('previous v0.15.0 backup exists')
+        if BACK.exists():raise RuntimeError('previous v0.16.0 backup exists')
         return 'upgrade'
     if BACK.exists() or RUNTIME.exists(): raise RuntimeError('unfinished or unknown package install; ask maintainer')
     if not base.PLIST.exists() and not base.MAN.exists():
@@ -265,7 +266,7 @@ def install(payload, uid):
         held.append(acquire(ROOT/'control.lock'))
         if qualified:inspect_auto(agent,qualified=True)
         if state in ('legacy','upgrade'): inspect_auto(ROOT/'nvmetrics-agent',qualified=True)
-        backup_app=APP.parent/'.NVMetrics.app.before-v0150'
+        backup_app=APP.parent/'.NVMetrics.app.before-v0160'
         if os.path.lexists(backup_app): raise RuntimeError('previous app backup already exists')
         stage=Path(tempfile.mkdtemp(prefix='.pkg-stage-',dir=ROOT))
         appstage=Path(tempfile.mkdtemp(prefix='.nvmetrics-install-',dir=APP.parent))
