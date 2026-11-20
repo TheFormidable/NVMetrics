@@ -1,0 +1,16 @@
+sesión run=0123456789abcdef pid=862
+  layout=620.70.06 sizeof=3184 off_temperatures=0 off_fan=0
+  salida=8 (safety_condition) muestras=31 ventanas=1 conservadas=1 sobrescritas=0 caminos_reintento=1 con_reintentos=1 recuperados=0 retry_max_us=13401 interrumpidos=1 max_gap_us=13388 primera=gpu:scheduler_preempted
+    gpu: scheduler_preempted=1 muestras
+  evento termination pct=50 motivo=safety_condition seq=31
+  evento auto_verified pct=0 motivo=rm_readback_zero seq=31
+  TRIP gpu:scheduler_preempted en seq=30 (safety_condition)
+    seq=27 fase=active conf_pct=50 gpu.cause=ok ts=1000028 ts_s64=1000028 vivo_antes=1000028 vivo_despues=1000028 age_ms=0 reintentos=0 retry_us=0 fin=- max_gap_us=-
+    seq=28 fase=active conf_pct=50 gpu.cause=ok ts=1000029 ts_s64=1000029 vivo_antes=1000029 vivo_despues=1000029 age_ms=0 reintentos=0 retry_us=0 fin=- max_gap_us=-
+    seq=29 fase=active conf_pct=50 gpu.cause=ok ts=1000030 ts_s64=1000030 vivo_antes=1000030 vivo_despues=1000030 age_ms=0 reintentos=0 retry_us=0 fin=- max_gap_us=-
+    seq=30 fase=active conf_pct=50 gpu.cause=scheduler_preempted ts=18446744073709551615 ts_s64=-1 vivo_antes=1000031 vivo_despues=18446744073709551615 age_ms=None reintentos=2 retry_us=13401 fin=scheduler_preempted max_gap_us=13388
+    tras AUTO verificado: gpu correcta en 0/6 muestras (~1500 ms); no se recuperó en ese intervalo.
+
+Lectura (solo lo que permiten estos datos):
+  scheduler_preempted: 1 muestras. Origen: planificador de macOS (observación interrumpida) (certeza media). el guard estuvo desplanificado >= 500 us dentro del reintento: no se observó al productor durante ese tiempo, así que no puede atribuírsele aunque se viera WIP antes y después.
+  Ninguna causa observada identifica el origen con certeza alta: hacen falta más sesiones o datos del productor.

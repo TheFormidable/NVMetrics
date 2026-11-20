@@ -1,3 +1,26 @@
+# 0.15.9 — ajuste directo de ventiladores
+
+- Aplicar un destino inferior envía un único `manual_lower` / `LOWER` (p. ej. 100→30), sin recorrer incrementos de 5 puntos. Se conserva la cuadrícula de selección, el arranque al 50 % y el mínimo de 30 %.
+- Se mantienen preflight, RM SET/GET, tres muestras válidas consecutivas de ambos tacómetros, límites de cada perfil, heartbeat, watchdog y rescate. Un fallo puede rechazar el cambio, recuperar un porcentaje superior verificado o solicitar AUTO.
+- Incluye los cambios RUSD de 0.15.8; la migración desde 0.15.8 conserva sus respaldos. Pendiente de validación física en macOS.
+
+# 0.15.8 — reintento RUSD sin espera (fallo reproducido en RTX 5050)
+
+- El Flight Recorder reprodujo el fallo en hardware: `first_ok=0`, `first_cause=write_in_progress`, `retries=0`, `retry_us=13388`. El `nanosleep(250 µs)` del reintento, en un guard con QoS de fondo, volvió tras 13,4 ms; el presupuesto de 2 ms se agotó antes del primer reintento y el guard volvió a AUTO por una colisión de lectura transitoria.
+- El reintento ya no duerme: 1.er reintento inmediato, luego espera activa de 40 µs (CPU pause + reloj monotónico), 2 ms de observación por sección, tope de 64 llamadas y de 200 000 iteraciones. Tras una interrupción del planificador (≥500 µs) se hace un único intento inmediato más. Solo se aceptan copias nuevas y coherentes; `ts = 0` nunca se reintenta.
+- Causas nuevas en el recorder, `safety_metrics.rusd_cause` y el analizador: `retry_budget_exhausted`, `scheduler_preempted`, `producer_write_persistent`; final de reintento por fuente (`retry_end`, `preempted`, `max_gap_us`, `obs`/`wip_obs`).
+- `retry_max_us` cuenta también los caminos de reintento sin reintentos (`retry_paths`); `retry_us` pasa a 32 bits. El TRIP se atribuye a la muestra que disparó aunque haya una ventana anterior abierta. El analizador trata un log vacío como no concluyente (código 1) y marca los registros 0.15.7 sin reintentos.
+- Versión 0.15.8 en app, agente, servicio, instalador, recibos y scripts; migración desde 0.15.7 probada. No cambian los límites térmicos, RM SET/GET, heartbeat, watchdog, rescate ni la restauración AUTO. No se modifica el driver.
+
+# 0.15.7 — RUSD Flight Recorder (diagnóstico; pendiente de hardware)
+
+- El guard root lee sus 5 secciones RUSD con `RusdReadData()` conservando su resultado y el timestamp vivo antes y después. Las causas son distintas por fuente: `ts_zero_producer_invalid`, `seqlock_timeout`, `write_in_progress`, `seq_marker_abi`, `read_inconsistent`, `ts_frozen`, `ts_backwards`, `value_out_of_range`, `clock_anomaly`. `safety_metrics` añade `rusd_cause` y `rusd.*`; `reason` no cambia.
+- **AUTO antes de cualquier E/S diagnóstica.** Las líneas `termination`, `safety_metrics`, `DIAG` y los registros de fallo RM se formatean en memoria y se escriben después del intento de AUTO, en el mismo orden. Con AUTO no verificado solo salen las líneas de protocolo, sin bloquear, y nada más.
+- **Sin escrituras durante Manual.** Las ventanas de anomalía se guardan en memoria (las 3 primeras y las 3 más recientes) y los contadores cubren todas las muestras. El único volcado a `rusd-flight.jsonl` ocurre al terminar, tras AUTO verificado. Las notas `RUSD_CONFIRM` y `telemetry_gap` también se difieren.
+- Relectura acotada si `RusdReadData()` agota sus intentos con `WRITE_IN_PROGRESS`: como máximo 3 veces en 2 ms, sin datos antiguos y nunca con `ts = 0`.
+- El analizador `diagnostics/rusd_flight_report.py` usa `session_summary.causes` y expresa la certeza de cada causa.
+- Paquete 0.15.7: una 0.15.6 instalada se actualiza (antes el instalador la daba por `same`). No cambian los límites térmicos, RM SET/GET, heartbeat, watchdog ni el rescate. Ver `RUSD-FLIGHT-RECORDER.md`.
+
 # 0.15.6 — entrada a Manual y diagnóstico real de 49 °C
 
 - El perfil térmico existente permite 49–59,9 °C con sensores válidos, AUTO verificado y demás requisitos. Se añaden pruebas C y Python para demostrar que **49 °C no es un límite**; permanecen el máximo estricto de 60 °C y las demás protecciones.

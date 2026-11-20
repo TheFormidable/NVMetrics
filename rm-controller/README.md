@@ -1,4 +1,10 @@
-# NVMetrics 0.15.6 — Diagnóstico de entrada RM y reintento seguro
+# NVMetrics 0.15.9 — ajuste directo de ventiladores y Flight Recorder
+
+La revisión 0.15.9 aplica el porcentaje seleccionado directamente, también al reducir la velocidad (por ejemplo, 100→30 % en una transacción RM). Se conservan la selección en múltiplos de 5, el arranque al 50 %, el preflight, la verificación de los dos tacómetros tras una reducción y la restauración AUTO ante fallos. Requiere validación física en macOS.
+
+La revisión 0.15.8 corrige el reintento de lectura RUSD que reprodujo el fallo en la RTX 5050: el reintento ya no usa `nanosleep()` (que llegó a tardar 13,4 ms y dejó 0 reintentos), sino un primer intento inmediato y espera activa acotada a 2 ms. No cambia el control físico. Véase [RUSD-FLIGHT-RECORDER.md](RUSD-FLIGHT-RECORDER.md).
+
+La revisión 0.15.7 añade al guard root un registrador de diagnóstico RUSD (`rusd-flight.jsonl`, escrito solo después de AUTO verificado) y una relectura acotada del seqlock. No cambia límites, RM SET/GET, watchdog ni rescate. No declara resuelto el fallo intermitente de `gpu_ts_ok`; véase [RUSD-FLIGHT-RECORDER.md](RUSD-FLIGHT-RECORDER.md).
 
 El icono conserva el diseño Apple/NVIDIA metálico aportado por el usuario, sin fondo negro exterior y con tamaño equilibrado; el instalador actualiza desde 0.15.3 sin modificar el driver. El panel Carbon contiene Resumen, Ventiladores, Diagnóstico y Ajustes. Sólo muestra lecturas reales del agente; no implementa voltaje, overclock, límites editables ni perfiles ficticios. Los cuatro estilos se guardan localmente. La curva recomendada sigue siendo consultiva y el control manual mantiene sus protecciones y pasos de 5 puntos. La revisión requiere validación nativa.
 
@@ -14,7 +20,7 @@ Continuación de `NVMetrics-RM-v0145-complete-source.zip`. **No es todavía una 
 
 ## Resultado
 
-- Instalador candidato `NVMetrics-0.15.6-Candidate-Intel.pkg`, para macOS x86_64, mínimo declarado macOS 14 (GPU Caps 0.15.0 probado en 26.7.3).
+- Instalador candidato `NVMetrics-0.15.9-Candidate-Intel.pkg`, para macOS x86_64, mínimo declarado macOS 14 (GPU Caps 0.15.0 probado en 26.7.3).
 - Aplicación SwiftUI, agente C y servicio/rescate/cliente Python congelados con PyInstaller 6.22.3. El usuario final no necesita Python, Homebrew, Xcode ni descargar paquetes.
 - Se requiere el driver NullMoth compatible, ya instalado. Este paquete no instala ni modifica el driver.
 - Se mantiene la restricción de la base a una sola RTX 5050 y al diseño RM observado de dos ventiladores, con candidatos de límites RPM 1150/3700. No se amplía a otros modelos.
@@ -32,7 +38,7 @@ Continuación de `NVMetrics-RM-v0145-complete-source.zip`. **No es todavía una 
 
 La 0.14.6 abría y calentaba un lector RUSD durante 1,2 s por cada sondeo. El descenso real registrado tardó unos 8 s por escalón. La nueva revisión utiliza un lector de sólo lectura con una conexión que dura únicamente durante Manual. Cada respuesta debe corresponder a la petición actual y demostrar avance de GPU, VRAM, potencia y RPM desde la respuesta anterior. Un timeout, EOF, fuente congelada o respuesta incorrecta invalida el lector y activa la ruta de fallo existente.
 
-Se mantienen los pasos de 5 %, las tres muestras de RPM, sus pausas de 450 ms, la pausa entre escalones de 700 ms, los límites y el rescate independiente. El lector no recibe comandos de boost, Eco ni SET. En AUTO se cierra para no mantener una suscripción de sensores innecesaria.
+En 0.14.7 se mantenían los escalones de 5 % y la pausa de 700 ms entre ellos. Desde 0.15.9 no hay escalones intermedios, pero se conservan las tres muestras de RPM, sus pausas de 450 ms, los límites y el rescate independiente. El lector no recibe comandos de boost, Eco ni SET. En AUTO se cierra para no mantener una suscripción de sensores innecesaria.
 
 Cuando se rechaza una bajada, se conserva el destino seleccionado y se indica el dato que la bloqueó (por ejemplo, 50,10 W frente al límite de 50 W). El límite no se amplía. Esta revisión añade migración desde 0.14.6; no modifica una sesión ni instalación activa.
 
@@ -49,7 +55,7 @@ Cuando se rechaza una bajada, se conserva el destino seleccionado y se indica el
 
 ## Política conservada
 
-Manual comienza al 50 % y desciende por pasos verificados de 5 % hasta un mínimo de 30 %. Los aumentos admiten un destino verificado hasta 100 %. Cada reducción verifica RM y requiere tres muestras consecutivas válidas de ambos tacómetros. Ante carga transitoria puede conservar un paso seguro o recuperar al menos 50 %; otros fallos solicitan AUTO.
+Manual comienza al 50 % y aplica directamente un destino autorizado entre 30 % y 100 % (múltiplos de 5). Cada reducción verifica RM y requiere tres muestras consecutivas válidas de ambos tacómetros. Ante carga transitoria puede conservar el porcentaje previo seguro o recuperar al menos 50 %; otros fallos solicitan AUTO.
 
 No se elevaron los límites: entrada térmica GPU <60 °C, VRAM <84 °C, ≤60 W y utilización ≤20 %; reducción por debajo de 50 % con GPU <58 °C, VRAM <82 °C, ≤50 W y utilización ≤20 %. En Manual, AUTO ante GPU ≥65 °C, VRAM ≥88 °C, >145 W, datos críticos inválidos o pérdida de supervisión. Se mantienen el guard a 250 ms, heartbeat nativo de 6 s, lease del cliente de 8 s y rescate separado. Son políticas experimentales de la aplicación, no límites certificados por el firmware.
 
@@ -74,7 +80,7 @@ La descarga inicial de encabezados NVIDIA requiere red. Se reutilizan los tags d
 
 ```sh
 NVMETRICS_BUILD_PYTHON="$PWD/.build-venv/bin/python" \
-  ./verify_package.sh /ruta/NVMetrics-0.15.6-Candidate-Intel.pkg
+  ./verify_package.sh /ruta/NVMetrics-0.15.9-Candidate-Intel.pkg
 ```
 
 ## Validación y límites

@@ -1,0 +1,8 @@
+sesión run=0123456789abcdef pid=861
+  layout=620.70.06 sizeof=3184 off_temperatures=0 off_fan=0
+  salida=0 (user_auto) muestras=108 ventanas=1 conservadas=1 sobrescritas=0 caminos_reintento=1 con_reintentos=1 recuperados=1 retry_max_us=13401 interrumpidos=1 max_gap_us=13388 primera=gpu:write_in_progress
+  evento auto_verified pct=0 motivo=rm_readback_zero seq=108
+
+Lectura (solo lo que permiten estos datos):
+  1 lectura(s) chocaron con una publicación y se recuperaron con la relectura acotada. Confirma que hay colisiones de lectura con este productor; no indica por sí solo de qué lado está el fallo original.
+  Ninguna causa observada identifica el origen con certeza alta: hacen falta más sesiones o datos del productor.

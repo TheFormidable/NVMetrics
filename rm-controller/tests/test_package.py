@@ -245,7 +245,7 @@ class TransactionTests(unittest.TestCase):
     def simulate_v014(self,version='0.14.0'):
         pkg.install(self.payload,501)
         self.back.rename(self.root/'original-v014-backup')
-        marker={'0.14.0':pkg.LEGACY_MARKER,'0.14.3':pkg.ADAPTIVE_MARKER,'0.14.4':pkg.ADAPTIVE_MARKER,'0.14.5':pkg.ADAPTIVE_MARKER,'0.14.6':pkg.FRESHNESS_MARKER,'0.14.7':pkg.SESSION_MARKER,'0.14.8':pkg.V0148_MARKER,'0.15.0':pkg.V0150_MARKER,'0.15.1':pkg.V0151_MARKER,'0.15.2':pkg.V0152_MARKER,'0.15.3':pkg.V0153_MARKER,'0.15.4':pkg.V0154_MARKER,'0.15.5':pkg.V0155_MARKER}.get(version,pkg.PREVIOUS_MARKER)
+        marker={'0.14.0':pkg.LEGACY_MARKER,'0.14.3':pkg.ADAPTIVE_MARKER,'0.14.4':pkg.ADAPTIVE_MARKER,'0.14.5':pkg.ADAPTIVE_MARKER,'0.14.6':pkg.FRESHNESS_MARKER,'0.14.7':pkg.SESSION_MARKER,'0.14.8':pkg.V0148_MARKER,'0.15.0':pkg.V0150_MARKER,'0.15.1':pkg.V0151_MARKER,'0.15.2':pkg.V0152_MARKER,'0.15.3':pkg.V0153_MARKER,'0.15.4':pkg.V0154_MARKER,'0.15.5':pkg.V0155_MARKER,'0.15.6':pkg.V0156_MARKER,'0.15.7':pkg.V0157_MARKER,'0.15.8':pkg.V0158_MARKER}.get(version,pkg.PREVIOUS_MARKER)
         (self.root/'nvmetrics-agent').write_bytes(marker)
         (self.app/'Contents/Resources/nvmetrics-agent').write_bytes(marker)
         (self.rt/'nvmetrics-runtime').write_text('previous frozen runtime')
@@ -310,7 +310,7 @@ class TransactionTests(unittest.TestCase):
         self.assertEqual(pkg.installed_state(501),'upgrade')
         pkg.install(self.payload,501)
         self.assertEqual(pkg.installed_state(501),'same')
-        self.assertEqual(json.loads(self.receipt.read_text())['version'],'0.15.6')
+        self.assertEqual(json.loads(self.receipt.read_text())['version'],'0.15.9')
         self.assertEqual((self.back/'Runtime/nvmetrics-runtime').read_text(),'previous frozen runtime')
         self.assertIn(pkg.MARKER,(self.root/'nvmetrics-agent').read_bytes())
         self.assertTrue(old_back.exists());self.assertTrue(old_app.exists())
@@ -394,7 +394,7 @@ class TransactionTests(unittest.TestCase):
         self.assertEqual(pkg.installed_state(501),'same')
         self.assertTrue(old_back.exists())
         self.assertTrue((self.back/'Previous.app').exists())
-        self.assertEqual(json.loads(self.receipt.read_text())['version'],'0.15.6')
+        self.assertEqual(json.loads(self.receipt.read_text())['version'],'0.15.9')
 
     def test_missing_gui_with_verified_0153_receipt_is_repaired(self):
         # An external deletion of the GUI must not strand a correctly
@@ -438,7 +438,7 @@ class TransactionTests(unittest.TestCase):
         self.assertEqual(pkg.installed_state(501),'upgrade')
         pkg.install(self.payload,501)
         self.assertEqual(pkg.installed_state(501),'same')
-        self.assertEqual(json.loads(self.receipt.read_text())['version'],'0.15.6')
+        self.assertEqual(json.loads(self.receipt.read_text())['version'],'0.15.9')
 
     def test_upgrade_from_0155_preserves_verified_guard_and_app_backup(self):
         self.simulate_v014('0.15.5')
@@ -448,7 +448,59 @@ class TransactionTests(unittest.TestCase):
         self.assertEqual(pkg.installed_state(501),'same')
         self.assertTrue(old_back.exists())
         self.assertTrue((self.back/'Previous.app').exists())
-        self.assertEqual(json.loads(self.receipt.read_text())['version'],'0.15.6')
+        self.assertEqual(json.loads(self.receipt.read_text())['version'],'0.15.9')
+
+    def test_upgrade_from_0156_is_not_same_and_preserves_its_backups(self):
+        # 0.15.7 regression: an installed 0.15.6 must be an UPGRADE. With the old VERSION the installer
+        # answered 'same' and returned without installing the new guard, service or app.
+        self.simulate_v014('0.15.6')
+        old_back=self.root/'.v0156-package-backup';old_back.mkdir()
+        self.assertEqual(pkg.installed_state(501),'upgrade')
+        pkg.install(self.payload,501)
+        self.assertEqual(pkg.installed_state(501),'same')
+        self.assertTrue(old_back.exists())
+        self.assertTrue((self.back/'Previous.app').exists())
+        self.assertIn(pkg.MARKER,(self.root/'nvmetrics-agent').read_bytes())
+        self.assertNotIn(pkg.V0156_MARKER,(self.root/'nvmetrics-agent').read_bytes())
+        self.assertEqual(json.loads(self.receipt.read_text())['version'],'0.15.9')
+
+    def test_upgrade_from_0157_is_not_same_and_preserves_its_backups(self):
+        # 0.15.8: the RTX 5050 that reproduced the RUSD fault runs 0.15.7; it must be upgraded, not 'same'
+        self.simulate_v014('0.15.7')
+        old_back=self.root/'.v0157-package-backup';old_back.mkdir()
+        older=self.root/'.v0156-package-backup';older.mkdir()
+        self.assertEqual(pkg.installed_state(501),'upgrade')
+        pkg.install(self.payload,501)
+        self.assertEqual(pkg.installed_state(501),'same')
+        self.assertTrue(old_back.exists() and older.exists())
+        self.assertTrue((self.back/'Previous.app').exists())
+        self.assertIn(pkg.MARKER,(self.root/'nvmetrics-agent').read_bytes())
+        self.assertNotIn(pkg.V0157_MARKER,(self.root/'nvmetrics-agent').read_bytes())
+        self.assertEqual(json.loads(self.receipt.read_text())['version'],'0.15.9')
+
+    def test_upgrade_from_0158(self):
+        self.simulate_v014('0.15.8')
+        old_back=self.root/'.v0158-package-backup';old_back.mkdir()
+        self.assertEqual(pkg.installed_state(501),'upgrade')
+        pkg.install(self.payload,501)
+        self.assertEqual(pkg.installed_state(501),'same')
+        self.assertTrue(old_back.exists())
+        self.assertEqual(json.loads(self.receipt.read_text())['version'],'0.15.9')
+
+    def test_0157_receipt_with_wrong_agent_is_refused(self):
+        self.simulate_v014('0.15.7')
+        (self.root/'nvmetrics-agent').write_bytes(pkg.V0156_MARKER)
+        record=json.loads(self.receipt.read_text());record['files']['nvmetrics-agent']=pkg.sha(self.root/'nvmetrics-agent')
+        self.receipt.write_text(json.dumps(record))
+        with self.assertRaisesRegex(RuntimeError,'wrong previous agent'):pkg.installed_state(501)
+
+    def test_0156_receipt_with_wrong_agent_is_refused(self):
+        # a 0.15.6 receipt is accepted only with the 0.15.6 agent marker on disk
+        self.simulate_v014('0.15.6')
+        (self.root/'nvmetrics-agent').write_bytes(pkg.V0155_MARKER)
+        record=json.loads(self.receipt.read_text());record['files']['nvmetrics-agent']=pkg.sha(self.root/'nvmetrics-agent')
+        self.receipt.write_text(json.dumps(record))
+        with self.assertRaisesRegex(RuntimeError,'wrong previous agent'):pkg.installed_state(501)
 
     def test_upgrade_handshake_failure_restores_runtime_app_and_receipt(self):
         record=self.simulate_v014()

@@ -36,9 +36,13 @@ int main(void){
     assert(!nvm_guard_must_restore(&s,work,1200)); /* actual v0.14.0 regression */
     work.util_pct=100;work.watts=100;
     assert(!nvm_guard_must_restore(&s,work,1300));
-    for(unsigned pct=95;pct>=50;pct-=5)assert(nvm_guard_lower(&s,work,pct,1400));
+    assert(!nvm_guard_can_lower(&s,work,30,1400));
+    assert(!nvm_guard_can_lower(&s,idle,31,1400));
+    assert(!nvm_guard_can_lower(&s,idle,100,1400));
+    assert(nvm_guard_can_lower(&s,idle,30,1400));
+    assert(nvm_guard_lower(&s,work,50,1400));
     assert(!nvm_guard_can_lower(&s,work,45,1400));
-    for(unsigned pct=45;pct>=30;pct-=5)assert(nvm_guard_lower(&s,idle,pct,1400));
+    assert(nvm_guard_lower(&s,idle,30,1400));
     assert(!nvm_guard_can_lower(&s,idle,25,1400));
     assert(!nvm_guard_must_restore(&s,work,1500)); /* monitor low speed under changing load */
     assert(nvm_guard_must_restore(&s,(struct nvm_guard_sample){65,70,40,50,1},1600));

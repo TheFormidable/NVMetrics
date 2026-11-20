@@ -21,12 +21,12 @@ import time
 import install_v012 as base
 from protocol import parse_agent
 
-VERSION = '0.15.6'
+VERSION = '0.15.9'
 ROOT = base.ROOT
 APP = Path('/Applications/NVMetrics.app')
 RUNTIME = ROOT/'Runtime'
 RECEIPT = ROOT/'.v014-package.json'
-BACK = ROOT/'.v0156-package-backup'
+BACK = ROOT/'.v0159-package-backup'
 FILES = ('server.py','backend.py','peer.py','physical.py','rescue.py','protocol.py','launchd_socket.py','nvmetrics-agent','nvmetrics-setting.sh')
 LEGACY = {
     'server.py':'aa833add4bd6377672441802fce5d38d9226862a98ca1b272e9e22e99378d64b',
@@ -37,7 +37,10 @@ LEGACY = {
     'protocol.py':'0b385a66267e1fec6f781b29c57e1fab0556b8bdaf3a5c6d8590b10f9527643e',
     'launchd_socket.py':'3f5645aaf924af8536586772a68c8e671418ad9b6797d2744233a38fdaaf8bf5',
 }
-MARKER = b'NVMETRICS_RM_V0156_CONTINUOUS'
+MARKER = b'NVMETRICS_RM_V0159_CONTINUOUS'
+V0158_MARKER = b'NVMETRICS_RM_V0158_CONTINUOUS'
+V0157_MARKER = b'NVMETRICS_RM_V0157_CONTINUOUS'
+V0156_MARKER = b'NVMETRICS_RM_V0156_CONTINUOUS'
 V0155_MARKER = b'NVMETRICS_RM_V0155_CONTINUOUS'
 V0154_MARKER = b'NVMETRICS_RM_V0154_CONTINUOUS'
 V0153_MARKER = b'NVMETRICS_RM_V0153_CONTINUOUS'
@@ -236,7 +239,7 @@ def installed_state(uid):
     if RECEIPT.exists():
         base.safe_file(RECEIPT)
         record=json.loads(RECEIPT.read_text())
-        if record.get('version') not in ('0.14.0','0.14.1','0.14.2','0.14.3','0.14.4','0.14.5','0.14.6','0.14.7','0.14.8','0.14.9','0.15.0','0.15.1','0.15.2','0.15.3','0.15.4','0.15.5',VERSION) or record.get('uid')!=uid:
+        if record.get('version') not in ('0.14.0','0.14.1','0.14.2','0.14.3','0.14.4','0.14.5','0.14.6','0.14.7','0.14.8','0.14.9','0.15.0','0.15.1','0.15.2','0.15.3','0.15.4','0.15.5','0.15.6','0.15.7','0.15.8',VERSION) or record.get('uid')!=uid:
             raise RuntimeError('different installed package/authorized user')
         base.safe_file(base.PLIST)
         # The GUI can be deleted or moved while a verified privileged service
@@ -248,13 +251,13 @@ def installed_state(uid):
         if not app_missing and tree_digest(APP)!=record['app']:
             raise RuntimeError('installed package differs; do not overwrite')
         for n in FILES:
-            if n=='nvmetrics-setting.sh' and record.get('version') not in ('0.14.9','0.15.0','0.15.1','0.15.2','0.15.3','0.15.4','0.15.5',VERSION):continue
+            if n=='nvmetrics-setting.sh' and record.get('version') not in ('0.14.9','0.15.0','0.15.1','0.15.2','0.15.3','0.15.4','0.15.5','0.15.6','0.15.7','0.15.8',VERSION):continue
             base.safe_file(ROOT/n)
             if sha(ROOT/n)!=record['files'][n]: raise RuntimeError('installed file changed:'+n)
         if record.get('version')==VERSION and not app_missing:return 'same'
-        expected_marker = {'0.14.0':LEGACY_MARKER,'0.14.3':ADAPTIVE_MARKER,'0.14.4':ADAPTIVE_MARKER,'0.14.5':ADAPTIVE_MARKER,'0.14.6':FRESHNESS_MARKER,'0.14.7':SESSION_MARKER,'0.14.8':V0148_MARKER,'0.14.9':V0149_MARKER,'0.15.0':V0150_MARKER,'0.15.1':V0151_MARKER,'0.15.2':V0152_MARKER,'0.15.3':V0153_MARKER,'0.15.4':V0154_MARKER,'0.15.5':V0155_MARKER,VERSION:MARKER}.get(record.get('version'),PREVIOUS_MARKER)
+        expected_marker = {'0.14.0':LEGACY_MARKER,'0.14.3':ADAPTIVE_MARKER,'0.14.4':ADAPTIVE_MARKER,'0.14.5':ADAPTIVE_MARKER,'0.14.6':FRESHNESS_MARKER,'0.14.7':SESSION_MARKER,'0.14.8':V0148_MARKER,'0.14.9':V0149_MARKER,'0.15.0':V0150_MARKER,'0.15.1':V0151_MARKER,'0.15.2':V0152_MARKER,'0.15.3':V0153_MARKER,'0.15.4':V0154_MARKER,'0.15.5':V0155_MARKER,'0.15.6':V0156_MARKER,'0.15.7':V0157_MARKER,'0.15.8':V0158_MARKER,VERSION:MARKER}.get(record.get('version'),PREVIOUS_MARKER)
         if expected_marker not in (ROOT/'nvmetrics-agent').read_bytes():raise RuntimeError('wrong previous agent')
-        if BACK.exists():raise RuntimeError('previous v0.15.6 backup exists')
+        if BACK.exists():raise RuntimeError('previous v0.15.9 backup exists')
         return 'upgrade'
     if BACK.exists() or RUNTIME.exists(): raise RuntimeError('unfinished or unknown package install; ask maintainer')
     if not base.PLIST.exists() and not base.MAN.exists():

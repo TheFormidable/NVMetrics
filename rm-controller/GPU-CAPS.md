@@ -39,7 +39,7 @@ Estos resultados representan una tarjeta y una configuración, no calibración n
 | Otras GPU y multi-GPU | Arquitectura de descubrimiento extensible; no validadas físicamente; agente selecciona GPU por defecto |
 | Distribución | Candidato Intel local; sin notarización ni certificación pública |
 
-`manual_authorized:false` en el diagnóstico no deshabilita ni certifica la ruta manual heredada. Esa ruta tiene su propia cualificación, guard y verificación de AUTO. Se conserva el mínimo 30%, entrada a 50%, máximo 100%, reducciones por escalones de 5 puntos porcentuales, vigilancia térmica y de muestras, read-back y rescate independiente. El perfil continuo no implica vigilancia desatendida segura. No se modifica la política de Eco o Reposo.
+`manual_authorized:false` en el diagnóstico no deshabilita ni certifica la ruta manual heredada. Esa ruta tiene su propia cualificación, guard y verificación de AUTO. Se conserva el mínimo 30%, entrada a 50%, máximo 100%, vigilancia térmica y de muestras, read-back y rescate independiente. Desde 0.15.9, la reducción se aplica directamente al destino seleccionado en múltiplos de 5 puntos. El perfil continuo no implica vigilancia desatendida segura. No se modifica la política de Eco o Reposo.
 
 ## Reproducibilidad y próximos pasos
 

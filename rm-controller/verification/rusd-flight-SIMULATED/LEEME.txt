@@ -1,0 +1,16 @@
+EJEMPLOS SIMULADOS. No proceden de hardware.
+Los genera tests/test_guard_rusd_scenarios.c: el guard real (nvm_v04_guard_cli) con RM falso y un
+productor RUSD con guion. Los timestamps (1000000+k, ...) son sintéticos. Formato del recorder: v3 (0.15.8).
+
+incident_0157      el registro EXACTO del 18-nov en RTX 5050 con 0.15.7 (first_ok=0, write_in_progress,
+                   retries=0, retry_us=13388): trip. El analizador lo marca como camino sin reintentos.
+incident_0158      el mismo arranque con 0.15.8: interrupción de 13388 us detectada, intento posterior
+                   correcto, Manual continúa.
+gpu_preempted      fallo tras una interrupción del planificador: causa scheduler_preempted (no productor).
+gpu_producer       WIP en cada observación durante 2 ms: producer_write_persistent.
+trip_attribution   ventana anterior (ventilador) abierta cuando la GPU dispara: el TRIP es de la GPU.
+gpu_seqlock, gpu_ts_zero  no incluidos (formato 0.15.7 y ts 0); se regeneran con el test.
+gpu_recovered      una colisión recuperada; Manual continúa.
+long_transients    solo el informe del analizador (.report.txt); el JSONL (180 KB) se regenera con el test.
+raise_rm_fail      RM rechaza un SET de RAISE: el registro del fallo se escribe después de AUTO.
+auto_unverified    AUTO no verificado: solo stdout de protocolo; el log del recorder queda vacío.

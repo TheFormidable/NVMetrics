@@ -24,7 +24,7 @@ En macOS **Intel x86_64**, con el checkout del driver compatible y las herramien
 bash rm-controller/Build.command \
   "$PWD/rm-controller/sources/NVMetrics" \
   "$HOME/gpu-caps-phase2B" \
-  "$PWD/release-v0156"
+  "$PWD/release-v0159"
 ```
 
 El instalador resultante se genera **fuera del árbol versionado**, en el directorio de salida elegido. Antes de instalar o probar control manual, verifica el estado AUTO. No es una versión certificada para control de ventiladores universal; consulta [seguridad](SECURITY.md) y [GPU Caps](rm-controller/GPU-CAPS.md).

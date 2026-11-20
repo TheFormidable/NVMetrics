@@ -89,8 +89,7 @@ final class PolicyAnswer: @unchecked Sendable {
     }
     @MainActor static func make(_ ipc: FakeIPC) async -> FanGuardUIModel {
         let m = FanGuardUIModel(query: ipc.query, pause: { ns in
-            // Keep normal heartbeat/rescue sleeps; accelerate only step pacing.
-            try? await Task.sleep(nanoseconds: ns == 700_000_000 ? 1_000_000 : ns)
+            try? await Task.sleep(nanoseconds: ns)
         })
         m.refresh(); await until { m.canBegin }
         return m
@@ -109,7 +108,8 @@ final class PolicyAnswer: @unchecked Sendable {
             precondition(model.currentPercent == 100)
             model.selectPercent(30); model.applySelection(); await until { !model.busy }
             precondition(model.currentPercent == 30)
-            precondition(ipc.writes.suffix(14).map { Int($0[2])! } == Array(stride(from: 95, through: 30, by: -5)))
+            precondition(ipc.writes.count == 3)
+            precondition(ipc.writes.last == ["manual_lower", ipc.token, "30"])
             model.restoreAuto(); await until { !model.busy && !model.active }
         }
         do {
@@ -148,12 +148,12 @@ final class PolicyAnswer: @unchecked Sendable {
             let m = await make(ipc)
             m.begin(); await until { m.active && !m.busy }
             m.selectPercent(100);m.applySelection();await until { !m.busy }
-            ipc.blockedLower = 95
+            ipc.blockedLower = 30
             m.selectPercent(30);m.applySelection();await until { ipc.lowerWaiter != nil }
             m.restoreAuto();ipc.lowerWaiter?.resume();ipc.lowerWaiter = nil
             await until { !m.busy && !m.active }
             precondition(ipc.writes.suffix(2).map { $0[0] } == ["manual_lower", "manual_auto"])
-            precondition(ipc.writes.dropLast().last?[2] == "95")
+            precondition(ipc.writes.dropLast().last?[2] == "30")
         }
         do {
             let ipc = FakeIPC(); let m = await make(ipc)
