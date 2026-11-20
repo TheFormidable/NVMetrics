@@ -26,6 +26,9 @@ xcrun swiftc -module-cache-path "$T/modules" -swift-version 5 -parse-as-library 
 # Run the original C/shell suites against the exact bundled base and patched
 # NVIDIA headers. Copy into a temporary checkout to preserve bundled sources.
 /usr/bin/ditto "$HERE/sources/NVMetrics" "$T/base"
+# Typecheck the actual active overlay (not the historical bundled GUI alone).
+cp "$HERE/app/"*.swift "$T/base/app/Sources/"
+xcrun swiftc -module-cache-path "$T/modules" -swift-version 5 -target x86_64-apple-macos14.0 -parse-as-library -typecheck "$T/base/app/Sources/"*.swift
 "$HERE/sources/NVMetrics/agent/fetch_headers.sh" "$HERE/sources/nvidia-macos-driver" "$CACHE"
 ln -s "$CACHE" "$T/base/build"
 "$T/base/run_tests.sh" "$HERE/sources/nvidia-macos-driver"

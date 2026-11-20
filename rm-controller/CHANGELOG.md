@@ -1,3 +1,12 @@
+# 0.16.0 — candidato de robustez y diagnóstico
+
+- Doctor de solo lectura desde la barra de menús, con reporte resumido sin tokens, UID ni identificadores de hardware.
+- Telemetría: descarta callbacks ajenos a la generación activa, limita tramas e historial, invalida lecturas obsoletas, no abre otro cliente RM hasta terminar el anterior y reconecta al despertar.
+- IPC cliente: plazo total por solicitud, validación estricta de versión y pruebas con respuestas parciales.
+- Migración de 0.15.0 con backups nuevos, sin cambiar ninguna política de ventiladores.
+- CI nativa: typecheck del overlay completo que realmente compila el paquete.
+- Pendiente de validación nativa y física; no es un release estable.
+
 # 0.15.0 — Manual continuo (candidato de prueba local)
 
 - Perfil continuo explícito: sin vencimiento de sesión ni de servicio; el guard C, watchdog del cliente y rescate independiente siguen activos. Se mantiene el mínimo de 30%, inicio a 50%, lectura RM y comprobación de tacómetros.

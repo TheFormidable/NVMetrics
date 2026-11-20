@@ -208,6 +208,7 @@ struct MenuContent: View {
         }
         Button("Abrir NVMetrics") { openWindow(id: "main"); NSApp.activate(ignoringOtherApps: true) }
             .keyboardShortcut("o")
+        Button("Diagnóstico…") { openWindow(id: "doctor"); NSApp.activate(ignoringOtherApps: true) }
         Button("Salir") { NSApp.terminate(nil) }.keyboardShortcut("q")
     }
 

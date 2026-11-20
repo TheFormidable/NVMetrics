@@ -45,5 +45,8 @@ struct NVMetricsApp: App {
         Window("Comportamiento AUTO", id: "firmware-curve") {
             FirmwareCurveView().environmentObject(recorder)
         }.windowResizability(.contentSize)
+        Window("NVMetrics Doctor", id: "doctor") {
+            DoctorView()
+        }
     }
 }

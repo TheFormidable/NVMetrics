@@ -181,7 +181,7 @@ class TransactionTests(unittest.TestCase):
         self.assertEqual(pkg.installed_state(501),'same')
         self.assertEqual((self.back/'Runtime/nvmetrics-runtime').read_text(),'previous frozen runtime')
         self.assertTrue((self.root/'original-v014-backup').exists())
-        self.assertTrue((self.app.parent/'.NVMetrics.app.before-v0150').exists())
+        self.assertTrue((self.app.parent/'.NVMetrics.app.before-v0160').exists())
 
     def test_upgrade_from_verified_v0141(self):
         self.simulate_v014('0.14.1')
@@ -228,7 +228,7 @@ class TransactionTests(unittest.TestCase):
         self.assertEqual(pkg.installed_state(501),'upgrade')
         pkg.install(self.payload,501)
         self.assertEqual(pkg.installed_state(501),'same')
-        self.assertEqual(json.loads(self.receipt.read_text())['version'],'0.15.0')
+        self.assertEqual(json.loads(self.receipt.read_text())['version'],'0.16.0')
         self.assertEqual((self.back/'Runtime/nvmetrics-runtime').read_text(),'previous frozen runtime')
         self.assertIn(pkg.MARKER,(self.root/'nvmetrics-agent').read_bytes())
         self.assertTrue(old_back.exists());self.assertTrue(old_app.exists())
@@ -250,6 +250,20 @@ class TransactionTests(unittest.TestCase):
         pkg.install(self.payload,501)
         self.assertEqual(pkg.installed_state(501),'same')
         self.assertTrue((self.root/'nvmetrics-setting.sh').exists())
+
+    def test_upgrade_from_verified_v0150(self):
+        record=self.simulate_v014('0.15.0')
+        (self.root/'nvmetrics-agent').write_bytes(pkg.V0150_MARKER)
+        (self.app/'Contents/Resources/nvmetrics-agent').write_bytes(pkg.V0150_MARKER)
+        record['files']['nvmetrics-agent']=pkg.sha(self.root/'nvmetrics-agent')
+        record['app']=pkg.tree_digest(self.app)
+        self.receipt.write_text(json.dumps(record))
+        (self.root/'.v0150-package-backup').mkdir()
+        (self.app.parent/'.NVMetrics.app.before-v0150').mkdir()
+        self.assertEqual(pkg.installed_state(501),'upgrade')
+        pkg.install(self.payload,501)
+        self.assertEqual(pkg.installed_state(501),'same')
+        self.assertTrue((self.root/'.v0150-package-backup').exists())
 
     def test_one_revision_everywhere(self):
         # The installer accepts the service only when its ping names this revision, and the package only when its
