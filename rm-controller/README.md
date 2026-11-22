@@ -1,6 +1,6 @@
-# NVMetrics 0.16.1 — Carbon + diagnóstico
+# NVMetrics 0.16.2 — Carbon + GPU Caps
 
-Candidato basado en 0.15.8 (`ff97457`): conserva UI Carbon, icono, Flight Recorder, reintento RUSD y guard manual. Migra desde 0.15.8 con UID, hashes y AUTO verificados. Ejecuta `Build.command`; salida `~/Desktop/NVMetrics-v0161-release/NVMetrics-0.16.1-Candidate-Intel.pkg`. No incluye el descenso directo 0.15.9. Pendiente de validación física.
+Candidato basado en 0.15.8 (`ff97457`): conserva UI Carbon, icono, Flight Recorder, reintento RUSD y guard manual. Migra desde 0.15.8 y 0.16.1 con UID, hashes y AUTO verificados. Ejecuta `Build.command` con el checkout compatible Phase2B (por defecto `~/gpu-caps-phase2B`); salida `~/Desktop/NVMetrics-v0162-release/NVMetrics-0.16.2-Candidate-Intel.pkg`. La fuente histórica incluida sigue disponible para pruebas, pero no contiene GPU Caps; el paquete ahora exige que el encabezado extraído coincida con el del kext. Doctor distingue fallos y cuenta capacidades verificadas sin conceder permisos. No incluye el descenso directo 0.15.9. Pendiente de validación del paquete nativo.
 
 # NVMetrics 0.15.8 — reintento RUSD sin espera y Flight Recorder
 

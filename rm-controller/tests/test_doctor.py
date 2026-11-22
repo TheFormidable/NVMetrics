@@ -51,6 +51,20 @@ class DoctorTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 doctor.read_agent(Path('/agent'), command)
 
+    def test_caps_preserves_known_failure_causes_and_verified_count(self):
+        for verdict in ('unsupported_build', 'open_failed', 'old_kext', 'other_major'):
+            report = doctor.build_report(Path('/missing'), read=lambda _, args:
+                [{'verdict': verdict}] if args == ('caps',) else [], ping=lambda: {})
+            check = next(c for c in report['checks'] if c['name'] == 'GPU Caps ABI')
+            self.assertEqual(check['status'], 'warn')
+            self.assertIn(verdict, check['detail'])
+        report = doctor.build_report(Path('/missing'), read=lambda _, args:
+            [{'verdict': 'usable', 'capabilities': [{'state': 'verified'}]*15 +
+              [{'state': 'unknown'}]}] if args == ('caps',) else [], ping=lambda: {})
+        check = next(c for c in report['checks'] if c['name'] == 'GPU Caps ABI')
+        self.assertEqual(check['status'], 'ok')
+        self.assertIn('15 capacidades verificadas', check['detail'])
+
     def test_runtime_dispatches_doctor_without_root(self):
         with patch('sys.argv', ['runtime', 'doctor']), patch('doctor.main', return_value=0) as main:
             self.assertEqual(runtime.main(), 0)

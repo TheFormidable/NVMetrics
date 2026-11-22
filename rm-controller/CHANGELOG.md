@@ -1,3 +1,9 @@
+# 0.16.2 — GPU Caps en el paquete y Doctor
+
+- La sonda Phase2B confirmó ABI usable y 15 hechos verificados en la RTX 5050; la aplicación 0.16.1 compilada con la fuente histórica devolvía `unsupported_build`.
+- El paquete exige el encabezado del checkout compatible, identidad con el encabezado extraído y marcador de compilación real; Doctor distingue las causas y cuenta hechos verificados.
+- Actualización transaccional desde 0.16.1; no modifica el driver ni amplía permisos manuales.
+
 # 0.16.1 — candidato Carbon y migración
 
 - Integra el trabajo de 0.16.0 sobre el código 0.15.8 real (Carbon y Flight Recorder), sin sustituir el control térmico por el de 0.15.0.

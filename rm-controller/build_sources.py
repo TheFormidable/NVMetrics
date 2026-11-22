@@ -29,6 +29,8 @@ def source_error(kind, path):
         for name in ('build/build_nvk.sh', 'nvk/ogkm-nvos-620.patch', 'nvk/ogkm-warnings.patch'):
             if not (path / name).is_file():
                 return f'missing driver source file: {name}'
+        if kind == 'driver-caps' and not (path / 'kexts/NVRM/nvrm_gpu_capabilities_abi.h').is_file():
+            return 'GPU Caps ABI missing: use the compatible Phase2B checkout (~/gpu-caps-phase2B) as the second Build.command argument'
     return None
 
 
@@ -42,7 +44,7 @@ def resolve(kind, explicit):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('kind', choices=('repo', 'driver'))
+    parser.add_argument('kind', choices=('repo', 'driver', 'driver-caps'))
     parser.add_argument('path')
     args = parser.parse_args()
     try:

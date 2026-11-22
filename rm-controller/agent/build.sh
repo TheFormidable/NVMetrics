@@ -10,6 +10,12 @@ W=${3:-${NVMETRICS_BUILD_CACHE:-$H/../build}}; mkdir -p "$W"; W=$(cd "$W" && pwd
 "$H/fetch_headers.sh" "$D" "$W"
 rm -rf "$W/rm"; python3 -I "$H/extract_rm_layer.py" "$D" "$W/rm"
 O=$W/ogkm; N=$W/rm/nvkmd/nvrm
+# A candidate must not silently compile the unsupported_build stub.
+ABI=nvrm_gpu_capabilities_abi.h
+if [[ ! -f "$N/$ABI" || ! -f "$D/kexts/NVRM/$ABI" ]] || ! cmp -s "$N/$ABI" "$D/kexts/NVRM/$ABI"; then
+  echo 'STOP: extracted GPU Caps ABI is absent or differs from the driver kext header.' >&2
+  exit 2
+fi
 xcrun clang -arch x86_64 -mmacosx-version-min=14.0 -O1 -Wall -Wno-unused-function -o "$OUT" \
   "$H/nvmetrics_agent.c" "$N/nvRmApi.c" "$N/nvrm_xnu.c" \
   -I"$H" -I"$W/rusd620" -I"$N" -I"$O/src/nvidia/arch/nvalloc/common/inc" -I"$O/src/nvidia/arch/nvalloc/unix/include" \

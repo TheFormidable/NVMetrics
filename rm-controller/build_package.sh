@@ -3,17 +3,21 @@
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd -P)"
 REPO="${1:-$HERE/sources/NVMetrics}"
-DRIVER="${2:-$HERE/sources/nvidia-macos-driver}"
-OUT="${3:-$HOME/Desktop/NVMetrics-v0161-release}"
+DRIVER="${2:-$HOME/gpu-caps-phase2B}"
+OUT="${3:-$HOME/Desktop/NVMetrics-v0162-release}"
 [[ $(uname -s) == Darwin && $(uname -m) == x86_64 ]] || { echo 'Run on Intel macOS.' >&2; exit 2; }
 source "$HERE/find_build_python.sh"
 PYTHON="$(find_build_python)" || { echo 'No compatible build Python; run Build.command.' >&2; exit 2; }
 REPO="$("$PYTHON" -B "$HERE/build_sources.py" repo "$REPO")"
-DRIVER="$("$PYTHON" -B "$HERE/build_sources.py" driver "$DRIVER")"
+DRIVER="$("$PYTHON" -B "$HERE/build_sources.py" driver-caps "$DRIVER")"
 "$PYTHON" -c 'import PyInstaller; print("PyInstaller",PyInstaller.__version__)' || { echo 'PyInstaller is missing; run Build.command.' >&2; exit 2; }
 export PYTHONPATH="$HERE/service:$HERE/client:$HERE"
 export NVMETRICS_BUILD_CACHE="${NVMETRICS_BUILD_CACHE:-$HERE/.build-cache}"
 NVMETRICS_BUILD_PYTHON="$PYTHON" "$HERE/run_tests.sh"
+# Historical tests use their pinned driver. Never reuse their patched OGKM
+# header cache for a different driver checkout; key it by the actual patches.
+DRIVER_CACHE_KEY="$(shasum -a 256 "$DRIVER/nvk/ogkm-nvos-620.patch" "$DRIVER/nvk/ogkm-warnings.patch" | shasum -a 256 | cut -c1-24)"
+export NVMETRICS_BUILD_CACHE="$NVMETRICS_BUILD_CACHE/driver-$DRIVER_CACHE_KEY"
 STAGE="$(mktemp -d)"
 trap 'rm -rf "$STAGE"' EXIT
 export CLANG_MODULE_CACHE_PATH="$STAGE/modules"
@@ -40,7 +44,9 @@ done
 test -s "$APP/Contents/Resources/AppIcon.icns"
 AGENT="$APP/Contents/Resources/nvmetrics-agent"
 test -x "$AGENT"
-strings "$AGENT" | grep 'NVMETRICS_RM_V0161_DIAGNOSTICS' >/dev/null
+strings "$AGENT" | grep 'NVMETRICS_RM_V0162_DIAGNOSTICS' >/dev/null
+# No hardware call: marker must come from the real, ABI-enabled implementation.
+strings "$AGENT" | grep -F 'NVMETRICS_GPU_CAPS_COMPILED' >/dev/null
 # The root guard must carry the RUSD flight recorder and its instrumented reader (diagnostic, 0.15.7).
 strings "$AGENT" | grep 'NVMETRICS_RM_V0157_RUSD_FLIGHT_RECORDER' >/dev/null
 # 0.15.8: the guard's RUSD retry busy-waits; it must not contain the sleeping retry of 0.15.7.
@@ -73,7 +79,7 @@ chmod +x "$GUARD/Runtime/nvmetrics-runtime"
 import plistlib,sys
 from pathlib import Path
 p=Path(sys.argv[1]);obj=plistlib.loads(p.read_bytes())
-obj['CFBundleShortVersionString']='0.16.1';obj['CFBundleVersion']='0.16.1'
+obj['CFBundleShortVersionString']='0.16.2';obj['CFBundleVersion']='0.16.2'
 obj['CFBundleIconFile']='AppIcon.icns'
 p.write_bytes(plistlib.dumps(obj))
 PY
@@ -107,12 +113,12 @@ PY
 "$PYTHON" -B "$HERE/verify_package_payload.py" render "$STAGE/scripts"
 echo 'Checking native ZIP round-trip before pkgbuild…'
 NVMETRICS_BUILD_PYTHON="$PYTHON" "$HERE/verify_scripts.sh" "$STAGE/scripts" "$STAGE/roundtrip" "$STAGE/payload"
-PKG="$OUT/NVMetrics-0.16.1-Candidate-Intel.pkg"
+PKG="$OUT/NVMetrics-0.16.2-Candidate-Intel.pkg"
 [[ ! -e "$PKG" ]] || { echo 'Output package already exists; choose a new directory.' >&2; exit 2; }
 CANDIDATE="$STAGE/candidate.pkg"
 PKG_ARGS=()
 if [[ -n "${NVMETRICS_INSTALLER_IDENTITY:-}" ]]; then PKG_ARGS=(--sign "$NVMETRICS_INSTALLER_IDENTITY"); fi
-/usr/bin/pkgbuild --nopayload --identifier org.nvmetrics.installer --version 0.16.1 \
+/usr/bin/pkgbuild --nopayload --identifier org.nvmetrics.installer --version 0.16.2 \
   --scripts "$STAGE/scripts" ${PKG_ARGS[@]+"${PKG_ARGS[@]}"} "$CANDIDATE"
 # Verify the actual package, not just the staging directory.
 NVMETRICS_BUILD_PYTHON="$PYTHON" "$HERE/verify_package.sh" "$CANDIDATE" "$STAGE/scripts/payload.zip"

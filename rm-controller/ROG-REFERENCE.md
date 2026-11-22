@@ -2,7 +2,7 @@
 
 Referencia: [thanhnndev/rog-control-macos](https://github.com/thanhnndev/rog-control-macos), `AsusWmi`, `RogControl.swift`, `AmdCppcPolicy.c`, `docs/ASUSCTL-MACOS.md` y `docs/CPU-POWER.md`. No se copia código ASUS ni se introduce otro kext. El código de NVMetrics sigue usando NVRM, RUSD, GPU Caps y el supervisor RM existente. Se conserva el dashboard, icono y tema.
 
-## Candidato 0.16.1
+## Candidato 0.16.2
 
 | Idea de referencia | Adaptación | Estado |
 |---|---|---|
@@ -11,7 +11,7 @@ Referencia: [thanhnndev/rog-control-macos](https://github.com/thanhnndev/rog-con
 | Recuperación después de wake | Reinicio del agente de monitorización, sin reactivar Manual | Implementado; validar sueño real |
 | Límite de trabajo del monitor | Tramas de hasta 64 KiB, historial de hasta 1200 muestras y 5 minutos; descartar datos antiguos | Implementado; validar macOS |
 | Backend separado | Se mantiene C + supervisor Python/rescate y SwiftUI; plazo absoluto IPC | Implementado parcialmente |
-| Versión y migración | Marcador nuevo, copias independientes, pruebas 0.15.8 → 0.16.1 | Simulación probada |
+| Versión y migración | Marcador nuevo, copias independientes, pruebas 0.15.8/0.16.1 → 0.16.2 | Simulación probada |
 | Comprobaciones sin hardware | Python y typecheck del overlay real en macOS CI | Implementado |
 
 Doctor se ejecuta desde el menú Diagnóstico o, sin sudo, mediante:
@@ -33,4 +33,4 @@ No ejecuta pruebas de carga, RM SET, fan-inspect privilegiado ni cambios de perf
 
 ## Validación requerida
 
-Antes de etiquetar 0.16.1 como estable: CI macOS completa; compilar e instalar candidato; confirmar que el dashboard es idéntico; verificar Doctor con driver presente/ausente; comparar telemetría y consumo CPU/RSS; cambiar cadencia 0,5/1/2 s repetidamente; dormir/despertar con AUTO; probar interrupción del agente en AUTO; después la regresión de Manual supervisado y retorno AUTO con hardware cualificado. No ejecutar SET desde una suite automatizada ni publicar un paquete no probado.
+Antes de etiquetar 0.16.2 como estable: CI macOS completa; compilar e instalar candidato; confirmar que el dashboard es idéntico; verificar Doctor con driver presente/ausente; comparar telemetría y consumo CPU/RSS; cambiar cadencia 0,5/1/2 s repetidamente; dormir/despertar con AUTO; probar interrupción del agente en AUTO; después la regresión de Manual supervisado y retorno AUTO con hardware cualificado. No ejecutar SET desde una suite automatizada ni publicar un paquete no probado.

@@ -70,10 +70,36 @@ def build_report(agent, read=read_agent, ping=lambda: request('ping', timeout=3)
             add(label, ('warn' if count else 'ok') if valid else 'unknown', str(count) if valid else 'Contador no disponible.')
 
     caps = read(agent, ('caps',))
-    verdicts = {'usable', 'stale', 'lost', 'pending', 'off', 'old_kext', 'other_major', 'bad_reply', 'bad_call', 'no_service'}
-    states = [r.get('verdict') if r.get('verdict') in verdicts else 'unknown' for r in caps if type(r.get('verdict')) is str]
-    add('GPU Caps ABI', 'ok' if states and all(s == 'usable' for s in states) else 'unknown',
-        ', '.join(states) if states else 'ABI no disponible. No concede permisos de escritura.')
+    verdicts = {
+        'usable': 'ABI compatible',
+        'unsupported_build': 'Agente compilado sin el encabezado GPU Caps',
+        'open_failed': 'No se pudo abrir el servicio NVRM',
+        'no_service': 'Servicio NVRM no encontrado',
+        'old_kext': 'El driver activo no anuncia la ABI',
+        'other_major': 'Versión mayor de ABI incompatible',
+        'bad_reply': 'Respuesta ABI inválida',
+        'bad_call': 'Consulta ABI rechazada',
+        'pending': 'Capacidades pendientes',
+        'off': 'Capacidades desactivadas',
+        'lost': 'Capacidades perdidas',
+        'stale': 'Capacidades no actualizadas',
+    }
+    states = [r.get('verdict') if r.get('verdict') in verdicts else 'unknown'
+              for r in caps if type(r.get('verdict')) is str]
+    details = []
+    for row in caps:
+        v = row.get('verdict')
+        if type(v) is not str:
+            continue
+        detail = f'{verdicts[v]} ({v})' if v in verdicts else 'Respuesta no reconocida'
+        facts = row.get('capabilities')
+        if v == 'usable' and type(facts) is list:
+            verified = sum(type(f) is dict and f.get('state') == 'verified' for f in facts)
+            detail += f'; {verified} capacidades verificadas'
+        details.append(detail)
+    add('GPU Caps ABI', 'ok' if states and all(s == 'usable' for s in states)
+        else 'warn' if any(s != 'unknown' for s in states) else 'unknown',
+        '; '.join(details) if details else 'ABI no disponible. No concede permisos de escritura.')
     for args, key, allowed, label in ((('eco', 'status'), 'eco', ('on', 'off'), 'Eco'),
                                       (('policy', 'status'), 'policy', ('idle', 'normal', 'undecided'), 'Política de boost')):
         rows = read(agent, args)
