@@ -4,6 +4,7 @@
 // It warns when the card runs hot or its fans stand still on a warm GPU (Alerts.swift), with "⚠︎" in the menu bar.
 // It follows macOS light / dark mode. All the driver work is in nvmetrics-agent and nvmetrics-setting.sh.
 import SwiftUI
+import AppKit
 
 @main
 struct NVMetricsApp: App {
@@ -31,7 +32,7 @@ struct NVMetricsApp: App {
                     menu.start(agent: agent, controls: controls)
                 }
         }
-        Window("NVMetrics", id: "main") {
+        Window("NVMetrics", id: "main-carbon") {
             MainView()
                 .environmentObject(agent)
                 .environmentObject(controls).environmentObject(fanGuard)
@@ -40,10 +41,14 @@ struct NVMetricsApp: App {
                     menu.start(agent: agent, controls: controls)
                 }
         }
-        .windowStyle(.hiddenTitleBar)
-        .windowResizability(.contentSize)
+        .defaultSize(width: min(840, NSScreen.main?.visibleFrame.width ?? 840),
+                     height: min(570, (NSScreen.main?.visibleFrame.height ?? 650) - 40))
+        .windowResizability(.contentMinSize)
         Window("Comportamiento AUTO", id: "firmware-curve") {
             FirmwareCurveView().environmentObject(recorder)
         }.windowResizability(.contentSize)
+        Window("NVMetrics Doctor", id: "doctor") {
+            DoctorView()
+        }
     }
 }

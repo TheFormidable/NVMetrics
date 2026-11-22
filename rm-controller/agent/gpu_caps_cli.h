@@ -89,7 +89,7 @@ static uint32_t nvm_caps_call_status(kern_return_t k)
 
 static int nvm_caps_cli(int argc)
 {
-    if (argc != 2) { fputs("usage: nvmetrics-agent caps\n", stderr); return 2; }
+    if (argc != 2) { fputs("usage: nvmetrics-agent caps\nNVMETRICS_GPU_CAPS_COMPILED\n", stderr); return 2; }
     io_iterator_t it = IO_OBJECT_NULL;
     CFMutableDictionaryRef match = IOServiceMatching("NVRM");
     if (!match || IOServiceGetMatchingServices(kIOMainPortDefault, match, &it) != KERN_SUCCESS) {

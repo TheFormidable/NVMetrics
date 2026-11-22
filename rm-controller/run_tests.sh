@@ -26,7 +26,31 @@ xcrun swiftc -module-cache-path "$T/modules" -swift-version 5 -parse-as-library 
 # Run the original C/shell suites against the exact bundled base and patched
 # NVIDIA headers. Copy into a temporary checkout to preserve bundled sources.
 /usr/bin/ditto "$HERE/sources/NVMetrics" "$T/base"
+# Typecheck the actual active overlay without modifying the pinned source.
+cp "$HERE/app/"*.swift "$T/base/app/Sources/"
+xcrun swiftc -module-cache-path "$T/modules" -swift-version 5 -target x86_64-apple-macos14.0 -parse-as-library -typecheck "$T/base/app/Sources/"*.swift
 "$HERE/sources/NVMetrics/agent/fetch_headers.sh" "$HERE/sources/nvidia-macos-driver" "$CACHE"
+# RUSD flight recorder (0.15.7): built against NVIDIA's real cl00de.h (620.70.06 layout) and RusdReadData().
+RUSD_INC=(-I "$HERE/agent" -I "$HERE/sources/NVMetrics/agent" -I "$HERE/tests" -I "$CACHE/rusd620" -I "$CACHE/ogkm/src/common/sdk/nvidia/inc")
+xcrun clang -std=c11 -O1 -Wall -Wno-unused-function "${RUSD_INC[@]}" "$HERE/tests/test_rusd_flight_recorder.c" -o "$T/test_rusd_flight_recorder"
+"$T/test_rusd_flight_recorder" "$T/rusd-flight-test.jsonl"
+xcrun clang -std=c11 -O1 -Wall -Wno-unused-function "${RUSD_INC[@]}" "$HERE/tests/test_guard_rusd_scenarios.c" -o "$T/test_guard_rusd_scenarios"
+mkdir "$T/rusd-scenarios"
+"$T/test_guard_rusd_scenarios" "$T/rusd-scenarios"
+# 0.15.8: the retry path with the real monotonic clock and CPU pause; it must not link any sleep.
+xcrun clang -std=c11 -O1 -Wall -Wno-unused-function "${RUSD_INC[@]}" "$HERE/tests/test_rusd_retry_realclock.c" -o "$T/test_rusd_retry_realclock" -lpthread
+"$T/test_rusd_retry_realclock"
+if nm -u "$T/test_rusd_retry_realclock" | grep -Eq '(^|[ _])(nanosleep|usleep|sleep)($|@)'; then
+  echo 'FAIL: the RUSD retry path links a sleep function' >&2; exit 1
+fi
+# Every line the recorder and the guard wrote must be valid JSON (JSONL for the root logs).
+"$PYTHON" -B - "$T/rusd-flight-test.jsonl" "$T/rusd-scenarios" <<'PY'
+import json,sys
+from pathlib import Path
+files=[Path(sys.argv[1])]+sorted(Path(sys.argv[2]).glob('*.jsonl'))+sorted(Path(sys.argv[2]).glob('*.stdout'))
+n=sum(1 for f in files for line in f.read_text().splitlines() if json.loads(line) is not None)
+print(f'PASS: {n} flight-recorder/guard JSON lines in {len(files)} files parse')
+PY
 ln -s "$CACHE" "$T/base/build"
 "$T/base/run_tests.sh" "$HERE/sources/nvidia-macos-driver"
 # The agent's "policy" command (idle mode for the apps already open) is built only when the driver's boost-policy

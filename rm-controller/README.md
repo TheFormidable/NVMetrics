@@ -1,4 +1,16 @@
-# NVMetrics 0.15.0 — candidato de Manual continuo para Intel
+# NVMetrics 0.16.2 — Carbon + GPU Caps
+
+Candidato basado en 0.15.8 (`ff97457`): conserva UI Carbon, icono, Flight Recorder, reintento RUSD y guard manual. Migra desde 0.15.8 y 0.16.1 con UID, hashes y AUTO verificados. Ejecuta `Build.command` con el checkout compatible Phase2B (por defecto `~/gpu-caps-phase2B`); salida `~/Desktop/NVMetrics-v0162-release/NVMetrics-0.16.2-Candidate-Intel.pkg`. La fuente histórica incluida sigue disponible para pruebas, pero no contiene GPU Caps; el paquete ahora exige que el encabezado extraído coincida con el del kext. Doctor distingue fallos y cuenta capacidades verificadas sin conceder permisos. No incluye el descenso directo 0.15.9. Pendiente de validación del paquete nativo.
+
+# NVMetrics 0.15.8 — reintento RUSD sin espera y Flight Recorder
+
+La revisión 0.15.8 corrige el reintento de lectura RUSD que reprodujo el fallo en la RTX 5050: el reintento ya no usa `nanosleep()` (que llegó a tardar 13,4 ms y dejó 0 reintentos), sino un primer intento inmediato y espera activa acotada a 2 ms. No cambia el control físico. Véase [RUSD-FLIGHT-RECORDER.md](RUSD-FLIGHT-RECORDER.md).
+
+La revisión 0.15.7 añade al guard root un registrador de diagnóstico RUSD (`rusd-flight.jsonl`, escrito solo después de AUTO verificado) y una relectura acotada del seqlock. No cambia límites, RM SET/GET, watchdog ni rescate. No declara resuelto el fallo intermitente de `gpu_ts_ok`; véase [RUSD-FLIGHT-RECORDER.md](RUSD-FLIGHT-RECORDER.md).
+
+El icono conserva el diseño Apple/NVIDIA metálico aportado por el usuario, sin fondo negro exterior y con tamaño equilibrado; el instalador actualiza desde 0.15.3 sin modificar el driver. El panel Carbon contiene Resumen, Ventiladores, Diagnóstico y Ajustes. Sólo muestra lecturas reales del agente; no implementa voltaje, overclock, límites editables ni perfiles ficticios. Los cuatro estilos se guardan localmente. La curva recomendada sigue siendo consultiva y el control manual mantiene sus protecciones y pasos de 5 puntos. La revisión requiere validación nativa.
+
+La revisión 0.15.1 añade una ventana adaptable e icono nativo. El rearme tras desconexión exige salida EOF explícita, AUTO confirmado por el guard y verificación independiente del rescate; nunca reanuda Manual sin acción del usuario. Los demás fallos conservan el bloqueo. La revisión aún necesita prueba nativa.
 
 **GPU Caps integrado (fases 1, 2C y 3).** Compilación e instalación confirmadas por el usuario el 17 de noviembre de 2026 en macOS 26.7.3 Intel. El driver fase 2B aporta capacidades cacheadas; el agente descubre canales RUSD y la GUI muestra los slots realmente observados. Véase [GPU-CAPS.md](GPU-CAPS.md). La lectura no autoriza escritura y no se han cambiado los pasos de 5%.
 
@@ -6,11 +18,11 @@ Para compilar localmente en macOS Intel, abre `Build.command` desde este directo
 
 La revisión 0.14.9 conserva Manual/AUTO, Eco y Reposo en caliente. Limita Manual a una hora y añade controles de seguridad IPC, rutas privilegiadas fijas y rotación de auditoría. Es experimental: no se ha validado físicamente ni firmado/notarizado para distribución pública. Véase `CHANGELOG.md` y `../SECURITY.md`.
 
-Continuación de `NVMetrics-RM-v0145-complete-source.zip`. **No es todavía una versión certificada como estable en control físico.** Se conserva la base integrada bajo `sources/` y se aplican las correcciones de esta revisión durante la compilación en una copia temporal. Esta entrega se incorpora bajo `rm-controller/` para preservar la implementación previa de la raíz del repositorio. El instalador público anterior está en [`packages/0.14.7/`](../packages/0.14.7/); 0.15.0 se construye localmente con los pasos documentados en [LEEME-GPU-CAPS](../LEEME-GPU-CAPS.md).
+Continuación de `NVMetrics-RM-v0145-complete-source.zip`. **No es todavía una versión certificada como estable en control físico.** Se conserva la base integrada bajo `sources/` y se aplican las correcciones de esta revisión durante la compilación en una copia temporal. La implementación activa se mantiene bajo `rm-controller/`. La copia antigua de `app/` y `agent/` en la raíz se retiró por duplicada; puede consultarse en el historial Git. El instalador 0.14.7 se conserva únicamente en [el historial archivado](https://github.com/TheFormidable/NVMetrics/tree/99e2399493123791ca5482b18907104c7d037d4f/packages/0.14.7); los nuevos paquetes se compilan localmente según [LEEME-GPU-CAPS](../LEEME-GPU-CAPS.md) y se publican como assets de Releases, no en Git.
 
 ## Resultado
 
-- Instalador candidato `NVMetrics-0.15.0-Candidate-Intel.pkg`, para macOS x86_64, mínimo declarado macOS 14 (GPU Caps probado en 26.7.3).
+- Instalador candidato `NVMetrics-0.15.8-Candidate-Intel.pkg`, para macOS x86_64, mínimo declarado macOS 14 (GPU Caps 0.15.0 probado en 26.7.3).
 - Aplicación SwiftUI, agente C y servicio/rescate/cliente Python congelados con PyInstaller 6.22.3. El usuario final no necesita Python, Homebrew, Xcode ni descargar paquetes.
 - Se requiere el driver NullMoth compatible, ya instalado. Este paquete no instala ni modifica el driver.
 - Se mantiene la restricción de la base a una sola RTX 5050 y al diseño RM observado de dos ventiladores, con candidatos de límites RPM 1150/3700. No se amplía a otros modelos.
@@ -70,7 +82,7 @@ La descarga inicial de encabezados NVIDIA requiere red. Se reutilizan los tags d
 
 ```sh
 NVMETRICS_BUILD_PYTHON="$PWD/.build-venv/bin/python" \
-  ./verify_package.sh /ruta/NVMetrics-0.15.0-Candidate-Intel.pkg
+  ./verify_package.sh /ruta/NVMetrics-0.15.8-Candidate-Intel.pkg
 ```
 
 ## Validación y límites

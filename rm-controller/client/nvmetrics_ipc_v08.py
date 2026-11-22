@@ -8,6 +8,7 @@ import json
 import os
 import socket
 import sys
+import time
 
 SOCKET='/Library/PrivilegedHelperTools/org.nvmetrics.rmguard/control.sock'
 OPS={'ping','status','inspect','auto_observe','control_status','manual_begin','manual_raise','manual_lower','manual_heartbeat','manual_auto'}
@@ -25,7 +26,7 @@ def root_peer(conn):
         return struct.unpack('3i',conn.getsockopt(socket.SOL_SOCKET,socket.SO_PEERCRED,12))[1]==0
     return False
 
-def request(op,session=None,pct=None,path=SOCKET,verify_root=True):
+def request(op,session=None,pct=None,path=SOCKET,verify_root=True,timeout=None):
     if op not in OPS:raise ValueError('operation_not_allowed')
     body={'v':1,'op':op}
     if op in {'manual_raise','manual_lower','manual_heartbeat','manual_auto'}:
@@ -39,18 +40,26 @@ def request(op,session=None,pct=None,path=SOCKET,verify_root=True):
         # Physical steps contain bounded native SET/readbacks and tach probes.
         # Give responses time to arrive; the independent guard/lease deadlines
         # are unchanged and still terminate unsafe or abandoned operations.
-        s.settimeout(65 if op=='manual_lower' else 35 if op=='manual_begin' else 12);s.connect(path)
+        budget=timeout if timeout is not None else (65 if op=='manual_lower' else 35 if op=='manual_begin' else 12)
+        deadline=time.monotonic()+budget
+        def remaining():
+            left=deadline-time.monotonic()
+            if left<=0:raise TimeoutError('response_deadline')
+            s.settimeout(left)
+        remaining();s.connect(path)
         if verify_root and not root_peer(s):raise PermissionError('server_is_not_root')
+        remaining()
         s.sendall((json.dumps(body,separators=(',',':'))+'\n').encode('utf8'))
         data=b''
         while b'\n' not in data and len(data)<65536:
+            remaining()
             b=s.recv(4096)
             if not b:break
             data+=b
         if not data.endswith(b'\n') or len(data)>65536 or data.count(b'\n')!=1:
             raise ValueError('invalid_response_frame')
         r=json.loads(data)
-        if type(r) is not dict or r.get('v')!=1:raise ValueError('invalid_response_version')
+        if type(r) is not dict or type(r.get('v')) is not int or r['v']!=1:raise ValueError('invalid_response_version')
         return r
 
 def main():

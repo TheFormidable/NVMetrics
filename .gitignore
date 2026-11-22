@@ -1,3 +1,36 @@
-build/
+# Build outputs and generated distribution assets
+*.pkg
+*.mpkg
+*.dmg
+*.app/
+*.xcarchive/
+*.dSYM/
 *.o
+*.a
+*.pyc
+*.pyo
+__pycache__/
 .DS_Store
+.build-venv/
+.build-cache/
+.validation/
+.swiftpm/
+DerivedData/
+build/
+dist/
+out/
+release-*/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+*.log
+
+# Local native build inputs and staging artifacts
+rm-controller/build/
+rm-controller/dist/
+rm-controller/out/
+rm-controller/release-*/
+rm-controller/.build-venv/
+rm-controller/.build-cache/
+rm-controller/.validation/
+rm-controller/*.spec

@@ -11,6 +11,9 @@ def main():
     if role == 'client':
         from nvmetrics_ipc_v08 import main as client_main
         return client_main()
+    if role == 'doctor':
+        from doctor import main as doctor_main
+        return doctor_main()
     if role not in ('server', 'rescue', 'install') or os.geteuid() != 0:
         print('privileged role requires root', file=sys.stderr)
         return 2
