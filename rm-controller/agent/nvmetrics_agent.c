@@ -180,7 +180,7 @@ static int policy_cli(int argc, char **argv)
         /* the second line is this revision's marker, which the package installer and build_package.sh look for in
            the agent they are about to install (package_install.py MARKER): 0.14.8 is the first with "policy" */
         fprintf(stderr, "usage: nvmetrics-agent policy [status|idle|normal|undecided]\n"
-                        "NVMETRICS_RM_V0162_DIAGNOSTICS\n");
+                        "NVMETRICS_RM_V0170_DIAGNOSTICS\n");
         return 2;
     }
     if (c != POL_STATUS && geteuid() != 0) { fprintf(stderr, "nvmetrics-agent: policy idle/normal/undecided needs root\n"); return 2; }
@@ -266,24 +266,27 @@ static void boost_json(FILE *f)
     if (bc.error[0]) fprintf(f, "\"%s\"}", bc.error); else fputs("null}", f);
 }
 
-/* one command line from the app; anything but "boost off|auto|max" is reported and ignored */
-static void control_line(char *line)
+#include "monitor_interval.h"
+/* Cadence changes stay on the same RM client; boost and guard policy are unchanged. */
+static void control_line(char *line, long *ms)
 {
     size_t n = strlen(line);
     while (n && (line[n - 1] == '\r' || line[n - 1] == ' ' || line[n - 1] == '\t')) line[--n] = 0;
     if (!strncmp(line, "boost ", 6) && nvm_boost_parse(line + 6, &bc.mode)) return;
+    if (nvm_monitor_interval(line, ms)) return;
     fprintf(stderr, "nvmetrics-agent: unknown command \"%.60s\"\n", line);
 }
 
 /* takes commands from stdin until `deadline` (mono ms). Returns 0 at the deadline or on a stop signal, -1 when stdin
    closed (the app went away). */
-static int control_wait(unsigned long long deadline)
+static int control_wait(unsigned long long start, long *ms, int initial)
 {
     static char buf[512];
     static size_t len;
     static int skipping;            /* inside a line too long for buf: dropped up to its newline */
     for (;;) {
         if (gStop) return 0;
+        unsigned long long deadline = start + (initial ? 0ULL : (unsigned long long)*ms);
         unsigned long long now = mono_ms();   /* a deadline already past still takes what is waiting */
         struct pollfd pfd[2] = { { .fd = STDIN_FILENO, .events = POLLIN }, { .fd = gWake[0], .events = POLLIN } };
         int r = poll(pfd, gWake[0] >= 0 ? 2 : 1, now < deadline ? (int)(deadline - now) : 0);
@@ -298,7 +301,7 @@ static int control_wait(unsigned long long deadline)
         char *start = buf, *nl;
         while ((nl = memchr(start, '\n', len - (size_t)(start - buf)))) {
             *nl = 0;
-            if (!skipping) control_line(start);
+            if (!skipping) control_line(start, ms);
             skipping = 0;
             start = nl + 1;
         }
@@ -376,6 +379,15 @@ static void sample_line(const NV00DE_SHARED_DATA *snap, int control)
     if (nvm_ok(snap->instPowerUsage.lastModifiedTimestamp)) power |= 4u;
     fprintf(stdout, ",\"gpu_profile\":{\"gpu_id\":%u,\"tach_slot_mask\":%u,\"thermal_target_mask\":%u,\"power_read_mask\":%u}",
             (unsigned)active_gpu_id, tach_seen, thermal, power);
+    /* Optional global NVAccel counter. It is NOT per-game FPS or a frame-time trace. */
+#ifdef __APPLE__
+    unsigned char flip_bytes[8];
+    size_t flip_size = sizeof flip_bytes;
+    int64_t flips;
+    if (sysctlbyname("debug.nvaccel_iop_flips", flip_bytes, &flip_size, NULL, 0) == 0 &&
+        nvm_health_bytes(flip_bytes, flip_size, &flips) && flips >= 0)
+        fprintf(stdout, ",\"display_flip_count\":%llu", (unsigned long long)flips);
+#endif
     fputc(',', stdout); nvm_health_json(&h, stdout);
     if (control) { fputc(',', stdout); boost_json(stdout); fputc(',', stdout); nvm_protect_json(&bc.prot, stdout); }
     nvm_json_close(stdout);
@@ -531,7 +543,7 @@ int main(int argc, char **argv)
     usleep(1200 * 1000);   /* polling starts at allocation; let the resource manager fill one pass */
     static NV00DE_SHARED_DATA snap;
     bc.last_step = mono_ms();
-    if (control && control_wait(bc.last_step) < 0) return 0;   /* the app's first "boost <mode>" applies to line one */
+    if (control && control_wait(bc.last_step, &ms, 1) < 0) return 0;   /* the app's first "boost <mode>" applies to line one */
     do {
         unsigned long long start = mono_ms();
         rusd_snapshot(live, &snap);
@@ -548,7 +560,7 @@ int main(int argc, char **argv)
         if (fflush(stdout) != 0 || ferror(stdout)) break;
         if (!watch) break;
         if (!control) usleep((useconds_t)ms * 1000);
-        else if (control_wait(start + (unsigned long long)ms) < 0) break;   /* stdin closed: the app went away */
+        else if (control_wait(start, &ms, 0) < 0) break;   /* stdin closed: the app went away */
     } while (!gStop);
     if (bc.held) boost_send(0);
     return 0;

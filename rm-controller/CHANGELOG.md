@@ -1,3 +1,11 @@
+# 0.17.0 — Gaming Lab y telemetría eficiente
+
+- La cadencia 0,5/1/2 s se cambia en vivo sin reconstruir la conexión RM; modo adaptativo opcional con histéresis.
+- Doctor usa una muestra reciente del monitor, distingue cero RPM de datos ausentes y conserva diagnósticos ABI.
+- Gaming Lab: perfiles de boost/cadencia, sesiones de GPU con energía estimada y cobertura, exportación CSV, contador global NVAccel opcional y análisis offline de frametimes reales (FPS, 1% low, P95/P99).
+- Registro AUTO pasa a opt-in si no había preferencia explícita; su bracket de seguridad independiente no cambia.
+- Migración desde 0.16.2 sin cambios al driver ni a los permisos manuales.
+
 # 0.16.2 — GPU Caps en el paquete y Doctor
 
 - La sonda Phase2B confirmó ABI usable y 15 hechos verificados en la RTX 5050; la aplicación 0.16.1 compilada con la fuente histórica devolvía `unsupported_build`.

@@ -14,6 +14,9 @@ def main():
     if role == 'doctor':
         from doctor import main as doctor_main
         return doctor_main()
+    if role == 'benchmark':
+        from benchmark import main as benchmark_main
+        return benchmark_main()
     if role not in ('server', 'rescue', 'install') or os.geteuid() != 0:
         print('privileged role requires root', file=sys.stderr)
         return 2
