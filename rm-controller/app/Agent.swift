@@ -43,7 +43,7 @@ final class Agent: ObservableObject {
         guard latest != nil, let start = sessionStartedAt else { return [] }
         return history.filter { $0.t >= start }
     }
-    @Published var intervalMs: Int = 1000 { didSet { if oldValue != intervalMs { restart() } } }
+    @Published var intervalMs: Int = 500 { didSet { if oldValue != intervalMs { restart() } } }
     @Published var boostMode: BoostMode = Agent.savedBoostMode() {
         didSet {
             UserDefaults.standard.set(boostMode.rawValue, forKey: "nvmetrics.boostMode")

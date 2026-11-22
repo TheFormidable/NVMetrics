@@ -15,12 +15,15 @@ import subprocess
 import sys
 import time
 
-from protocol import ProtocolError,rpm_floor,MANUAL_FLOOR
+from protocol import ProtocolError,rpm_floor,MANUAL_FLOOR,parse_agent
 
 ROOT=Path('/Library/PrivilegedHelperTools/org.nvmetrics.rmguard')
 LEASE=Path('/var/run/nvmetrics-rm-v05-session.lock')
 MAX_MANUAL_SECONDS=3600
 RESCUE_DELAY_SECONDS=MAX_MANUAL_SECONDS+15
+# Root-only JSONL written by the C guard's RUSD flight recorder (diagnostic only).
+FLIGHT_LOG='rusd-flight.jsonl'
+FLIGHT_MAX_BYTES=8*1024*1024
 
 class PhysicalError(ValueError):
     def __init__(self,message,*,sample=None,requested=None,applied=None):
@@ -76,6 +79,9 @@ class Physical:
         # A missing guard event, unknown fault or unverified rescue stays latched.
         return self.thermal_profile and self.failure and self.last_end=='guard_heartbeat_trip_rescue_pending'
 
+    def _recoverable_client_disconnect(self):
+        return self.thermal_profile and self.failure and self.last_end=='client_disconnect_verified_rescue_pending'
+
     def _recoverable_tach(self):
         # Only an absent sample in the low-speed IDLE profile is eligible.
         # Explicit stall/low RPM, C guard faults, thermal trips and rescue
@@ -102,6 +108,36 @@ class Physical:
                 os.close(fd);fd=-1
                 fd=os.open(path,flags|os.O_EXCL,0o600)
             os.write(fd,line)
+        finally:
+            if fd>=0:os.close(fd)
+
+    def _open_flight_log(self):
+        """Append-only, root-only sink for the guard's RUSD flight recorder.
+        Diagnostic only: any problem disables the sink (the guard then keeps a
+        one-line summary in guard-last.stderr.log), it never blocks a session.
+        Returns an fd the guard may inherit, or None."""
+        path=ROOT/FLIGHT_LOG
+        flags=os.O_WRONLY|os.O_APPEND|os.O_CREAT|getattr(os,'O_NOFOLLOW',0)|getattr(os,'O_CLOEXEC',0)
+        fd=-1
+        try:
+            fd=os.open(path,flags,0o600)
+            st=os.fstat(fd)
+            if not stat.S_ISREG(st.st_mode) or st.st_uid!=os.geteuid() or st.st_nlink!=1 or st.st_mode&0o077:
+                os.close(fd);fd=-1
+                self._audit('rusd_flight_log_refused',reason='unsafe_file')
+                return None
+            # Bound the log; keep the previous generation for the audit bundle.
+            if st.st_size>FLIGHT_MAX_BYTES:
+                os.close(fd);fd=-1
+                os.replace(path,path.with_suffix('.jsonl.1'))
+                fd=os.open(path,flags|os.O_EXCL,0o600)
+            if fd>255:  # the guard accepts 3..255 only
+                os.close(fd);fd=-1
+                return None
+            result,fd=fd,-1
+            return result
+        except OSError:
+            return None
         finally:
             if fd>=0:os.close(fd)
 
@@ -138,7 +174,7 @@ class Physical:
         return {'active':self.token is not None,'mode':'manual' if self.token else 'auto_or_unverified',
                 'percent':self.pct,'seconds_left':None if self.continuous and self.token else round(left,1),'unlimited_session':self.continuous,'physical_enabled':self.enabled,
                 'safety_profile':self.safety_profile,
-                'one_shot_used':self.used,'rearm_pending':self.used and (self._recoverable_tach() or self._recoverable_thermal() or self._recoverable_heartbeat() or (not self.failure and self.last_end=='user_auto_verified')),
+                'one_shot_used':self.used,'rearm_pending':self.used and (self._recoverable_tach() or self._recoverable_thermal() or self._recoverable_heartbeat() or self._recoverable_client_disconnect() or (not self.failure and self.last_end=='user_auto_verified')),
                 'last_end_reason':self.last_end,
                 'last_trip':self.last_trip,
                 'last_trip_percent':self.last_trip_percent,
@@ -186,7 +222,10 @@ class Physical:
                 if found is not None:
                     detail=str(found.get('reason','unspecified'))[:80]
                     break
-            self._audit('guard_terminated_unexpected',exit_code=self.guard.returncode,detail=detail)
+            safety=next((ev for ev in guard_events if ev.get('event')=='safety_metrics'),None) or {}
+            rusd_cause=safety.get('rusd_cause')
+            self._audit('guard_terminated_unexpected',exit_code=self.guard.returncode,detail=detail,
+                        rusd_cause=str(rusd_cause)[:80] if rusd_cause is not None else None)
             self.token=None;self.pct=0;self.failure=True
             self.last_end='guard_terminated_'+detail+'_rescue_pending'
             if (self.thermal_profile and self.guard.returncode==8 and detail in
@@ -204,7 +243,8 @@ class Physical:
         # conflate "rearm forbidden" with "rescue failed".
         thermal=self._recoverable_thermal()
         heartbeat=self._recoverable_heartbeat()
-        recoverable=self._recoverable_tach() or thermal or heartbeat
+        disconnect=self._recoverable_client_disconnect()
+        recoverable=self._recoverable_tach() or thermal or heartbeat or disconnect
         if self.failure and not recoverable and self.last_end.endswith('_rescue_pending') and self.rescue is not None:
             rc=self.rescue.poll()
             if rc is not None:
@@ -224,7 +264,7 @@ class Physical:
         # An explicit parent EOF normally returns C exit code 12. A C safety
         # fault or RM readback failure could race the tachometer probe; never
         # reinterpret that independent guard failure as a recoverable gap.
-        if recoverable and not thermal and not heartbeat and self.guard.poll()!=12:
+        if recoverable and not thermal and not heartbeat and not disconnect and self.guard.poll()!=12:
             self.last_end='tachometer_missing_guard_fault_rescue_pending'
             self._audit('tachometer_rearm_refused_guard_fault',exit_code=self.guard.poll())
             return
@@ -232,6 +272,8 @@ class Physical:
             self.last_end='thermal_rearm_guard_fault_rescue_pending';return
         if heartbeat and self.guard.poll()!=8:
             self.last_end='heartbeat_rearm_guard_fault_rescue_pending';return
+        if disconnect and self.guard.poll()!=12:
+            self.last_end='client_disconnect_guard_fault_rescue_pending';return
         if self.rescue is None:
             self.failure=True;self.last_end='rescue_missing_restart_service';self._audit('rescue_missing');return
         rescue_rc=self.rescue.poll()
@@ -255,6 +297,19 @@ class Physical:
         self.failure=False
         self.last_end='auto_independently_verified_ready'
         self._audit('rescue_verified_auto_rearmed',previous_trip=self.last_trip,automatic_recovery=recoverable)
+
+    def verified_rescue_ready_for_service_recycle(self):
+        """An inactive, fatally latched service may release its lock and exit.
+
+        An independent root rescue has already exited successfully after
+        verifying firmware AUTO. The server must additionally perform a NEW
+        read-only RM inspect before retiring; this predicate alone never
+        authorizes Manual or hardware writes.
+        """
+        return (self.token is None and self.used and self.failure and
+                self.last_end.endswith('_rescue_verified_restart_service') and
+                self.guard is not None and self.guard.poll() is not None and
+                self.rescue is not None and self.rescue.poll()==0)
 
     @staticmethod
     def idle_ok(s,rm,thermal=False,low=False,continuous=False):
@@ -423,6 +478,40 @@ class Physical:
             time.sleep(0.45)
         raise PhysicalError('load_profile_spinup_failed_'+last_reason)
 
+    def _rearm_verified_no_write_begin(self):
+        """Recover a rejected pre-START entry, never an attempted RM write.
+
+        Before rescue arming, no START command is sent, so the native guard
+        cannot perform SET. A fresh independent RM GET for both AUTO records
+        is mandatory before dropping the one-shot latch. Fail closed if the
+        guard remains alive or any proof is unavailable.
+        """
+        if self.rescue is not None or self.token is not None or self.last_rm_transaction is not None:
+            return False
+        if self.guard is not None and self.guard.poll() is None:
+            return False
+        try:
+            p=subprocess.run([str(self.agent),'fan','rm-inspect'],
+                             stdin=subprocess.DEVNULL,capture_output=True,text=True,
+                             timeout=5,env={'PATH':'/usr/bin:/bin','HOME':'/var/root','LANG':'C'})
+            if p.returncode != 0 or len(p.stdout)>65536:
+                return False
+            verified=parse_agent(p.stdout,'inspect')
+            if verified.get('mode')!='auto':
+                return False
+        except (OSError,ValueError,subprocess.TimeoutExpired,ProtocolError):
+            return False
+        if self.lease_fd is not None:
+            os.close(self.lease_fd);self.lease_fd=None
+        if self.guard and self.guard.stdout:
+            self.guard.stdout.close()
+        self.guard=None
+        self.used=False
+        self.failure=False
+        self.last_end='entry_refused_no_write_auto_verified'
+        self._audit('entry_refused_no_write_rearmed',reason=(self.last_guard_event or {}).get('reason'))
+        return True
+
     def begin(self,uid,status,inspect,probe=None):
         if not self.enabled:raise PhysicalError('physical_mode_disabled')
         if self.continuous and any((r.get('rpm_min_candidate'),r.get('rpm_max_candidate'))!=(1150,3700)
@@ -432,14 +521,14 @@ class Physical:
             raise PhysicalError('unqualified_cooler_layout')
         self._poll_child()
         if self.used or self.token:
-            if self.last_end=='user_auto_verified' or self._recoverable_tach() or self._recoverable_thermal() or self._recoverable_heartbeat():raise PhysicalError('previous_rescue_still_verifying_AUTO')
+            if self.last_end=='user_auto_verified' or self._recoverable_tach() or self._recoverable_thermal() or self._recoverable_heartbeat() or self._recoverable_client_disconnect():raise PhysicalError('previous_rescue_still_verifying_AUTO')
             raise PhysicalError('previous_session_or_rescue_not_safe_to_rearm')
         if not self.idle_ok(status,inspect,self.thermal_profile,continuous=self.continuous):
             reason=self.preflight_rejection(status,inspect,self.thermal_profile,self.continuous)
             self._audit('manual_begin_refused',reason=reason,
                         gpu_c=status.get('gpu_c'),mem_c=status.get('mem_c'),
                         power_w=status.get('power_w'),util_pct=status.get('util_gpu_pct'))
-            raise PhysicalError(reason)
+            raise PhysicalError(reason,sample=status)
         self.used=True  # deny retries even after failures or expired session
         self.last_trip=None
         self.last_trip_percent=None
@@ -462,18 +551,36 @@ class Physical:
                 self.guard_log=os.fdopen(log_fd,'wb',buffering=0);log_fd=-1
             finally:
                 if log_fd>=0:os.close(log_fd)
-            self.guard=subprocess.Popen([str(self.agent),'fan','rm-guard'],
-                                        stdin=subprocess.PIPE,stdout=subprocess.PIPE,
-                                        stderr=self.guard_log,bufsize=0,
-                                        env={'PATH':'/usr/bin:/bin','HOME':'/var/root','LANG':'C',
-                                             'NVMETRICS_FAN_GUARD':'ACEPTO_GUARD_V04',
-                                             **({'NVMETRICS_RM_THERMAL_SUPERVISOR':'USER_AUTHORIZED_V0141'} if self.thermal_profile else {}),
-                                             **({'NVMETRICS_RM_CONTINUOUS':'USER_AUTHORIZED_V0150'} if self.continuous else {}),
-                                             **({'NVMETRICS_RM_LOAD_TEST':'USER_AUTHORIZED_V10'} if self.load_profile else {})})
+            # RUSD flight recorder: inherited append-only fd + run_id for correlation
+            # with controller-events.jsonl. Never a path the guard opens itself.
+            flight_fd=self._open_flight_log()
+            try:
+                self.guard=subprocess.Popen([str(self.agent),'fan','rm-guard'],
+                                            stdin=subprocess.PIPE,stdout=subprocess.PIPE,
+                                            stderr=self.guard_log,bufsize=0,
+                                            pass_fds=(flight_fd,) if flight_fd is not None else (),
+                                            env={'PATH':'/usr/bin:/bin','HOME':'/var/root','LANG':'C',
+                                                 'NVMETRICS_FAN_GUARD':'ACEPTO_GUARD_V04',
+                                                 **({'NVMETRICS_RUSD_FR_FD':str(flight_fd),'NVMETRICS_RUSD_FR_RUN':self.run_id}
+                                                    if flight_fd is not None else {}),
+                                                 **({'NVMETRICS_RM_THERMAL_SUPERVISOR':'USER_AUTHORIZED_V0141'} if self.thermal_profile else {}),
+                                                 **({'NVMETRICS_RM_CONTINUOUS':'USER_AUTHORIZED_V0150'} if self.continuous else {}),
+                                                 **({'NVMETRICS_RM_LOAD_TEST':'USER_AUTHORIZED_V10'} if self.load_profile else {})})
+            finally:
+                if flight_fd is not None:os.close(flight_fd)  # the guard holds its own inherited copy
+            self._audit('rusd_flight_recorder',sink=flight_fd is not None,log=FLIGHT_LOG)
             ev=self._read_event(6)
-            if ev.get('event')!='ready':raise PhysicalError('guard_not_ready')
+            if ev.get('event')!='ready':
+                reason=str(ev.get('reason','unknown'))[:80]
+                raise PhysicalError('guard_entry_'+reason,sample=status)
             self._arm_rescue()  # ACK mandatory before START 50; rescue also checks server pulse
-            ev=self._send('START 50','manual')
+            try:
+                ev=self._send('START 50','manual')
+            except PhysicalError as exc:
+                event=self.last_guard_event or {}
+                if event.get('event') in ('entry_refused','start_refused'):
+                    raise PhysicalError('guard_start_'+str(event.get('reason','unknown'))[:80],sample=status) from exc
+                raise
             if ev.get('pct')!=50:raise PhysicalError('guard_percent_mismatch')
             # A successful private RM readback is NOT enough to authorize load:
             # make sure both tachometers show real spinning fans at 50%.
@@ -489,7 +596,13 @@ class Physical:
         except Exception:
             self.failure=True;self.last_end='begin_failed_rescue_pending'
             self._audit('begin_failed_restore_pending',guard_event=self.last_guard_event)
+            # An unsuccessful READ-ONLY entry must not poison all future
+            # sessions. Never use this path once a rescue was armed or START
+            # may have issued SET; those still require independent recovery.
+            no_write=self.rescue is None and self.last_rm_transaction is None
             self._close_guard()
+            if no_write:
+                self._rearm_verified_no_write_begin()
             raise
 
     def _validate(self,uid,token):
@@ -713,6 +826,22 @@ class Physical:
         self._poll_child()  # may rearm now if the independent rescue has finished
         return {'mode':'auto','readback_verified':True,'physical_enabled':self.enabled,'last_end_reason':self.last_end}
 
+    def _classify_client_disconnect(self):
+        # A client lease expiry is recoverable only after an explicit clean
+        # native EOF exit with verified AUTO; independent root rescue must
+        # still independently verify AUTO before any new session is allowed.
+        if self.thermal_profile and self.guard and self.guard.poll()==12 and self.guard.stdout:
+            try:
+                events=[json.loads(line) for line in self.guard.stdout.read(8192).splitlines()]
+                if (any(e.get('event')=='termination' and e.get('reason')=='client_disconnected' for e in events)
+                        and any(e.get('event')=='auto_verified' and e.get('pct')==0 for e in events)
+                        and not any(e.get('event') in ('safety_metrics','safety_auto','failure','auto_failed') for e in events)):
+                    self.last_end='client_disconnect_verified_rescue_pending'
+                    self.last_trip='client_lease_expired'
+                    self._audit('client_disconnect_native_auto_verified')
+            except (OSError,ValueError,TypeError,AttributeError):
+                pass
+
     def _close_guard(self):
         if self.guard:
             try:
@@ -745,6 +874,7 @@ class Physical:
             elif self.failure and not self.last_end.endswith('_rescue_pending'):
                 self.last_end=reason+'_rescue_pending'
             self._close_guard()
+            if reason=='client_lease_expired':self._classify_client_disconnect()
 
     def close(self):
         self.stop('server_shutdown')

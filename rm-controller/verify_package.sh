@@ -2,7 +2,7 @@
 # Read-only inspection of our locally built package. No root or RM operations.
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd -P)"
-PKG="${1:-$HOME/Desktop/NVMetrics-v0160-release/NVMetrics-0.16.0-Candidate-Intel.pkg}"
+PKG="${1:-$HOME/Desktop/NVMetrics-v0161-release/NVMetrics-0.16.1-Candidate-Intel.pkg}"
 [[ $(uname -s) == Darwin ]] || { echo 'macOS required.' >&2; exit 2; }
 [[ -f "$PKG" ]] || { echo "Package not found: $PKG" >&2; exit 2; }
 source "$HERE/find_build_python.sh"

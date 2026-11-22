@@ -1,5 +1,6 @@
 import json
 import os
+import fcntl
 import plistlib
 import sys
 import tempfile
@@ -60,6 +61,71 @@ class PackagingTests(unittest.TestCase):
             self.assertNotEqual(first,pkg.tree_digest(t))
             (t/'external').symlink_to('/etc/passwd')
             with self.assertRaises(RuntimeError):pkg.tree_digest(t)
+
+    def test_installer_reports_occupied_lock_path_without_stealing_it(self):
+        # The macOS error was '[Errno 35] Resource temporarily unavailable'.
+        # Log the path so an operator can distinguish physical lease, native
+        # guard, control socket and package-install serialization.
+        with tempfile.TemporaryDirectory() as folder:
+            lock=Path(folder)/'fan-session.lock'
+            fd=os.open(lock,os.O_CREAT|os.O_RDWR,0o600)
+            try:
+                fcntl.flock(fd,fcntl.LOCK_EX|fcntl.LOCK_NB)
+                with patch.object(pkg.base,'safe_file'):
+                    with self.assertRaisesRegex(RuntimeError,'installer_lock_busy:.*fan-session.lock'):
+                        pkg.acquire(lock)
+                # The original owner has not been forcibly unlocked.
+                other=os.open(lock,os.O_RDWR)
+                try:
+                    with self.assertRaises(BlockingIOError):
+                        fcntl.flock(other,fcntl.LOCK_EX|fcntl.LOCK_NB)
+                finally:
+                    os.close(other)
+            finally:
+                os.close(fd)
+
+    def test_idle_verified_post_rescue_daemon_can_release_installer_lease(self):
+        state={'active':False,'one_shot_used':True,'rearm_pending':False,
+               'watchdog_armed':False,
+               'last_end_reason':'guard_terminated_gpu_temperature_timestamp_invalid_rescue_verified_restart_service'}
+        with patch.object(pkg,'loaded',return_value=True),patch.object(pkg,'run') as runner,\
+             patch.object(pkg,'inspect_auto') as inspect,patch.object(pkg,'stop_job') as stop:
+            runner.return_value=Mock(returncode=0,stdout=json.dumps({'ok':True,'data':state}))
+            self.assertTrue(pkg.retire_verified_latched_service(501))
+            inspect.assert_called_once_with(pkg.ROOT/'nvmetrics-agent',qualified=True)
+            stop.assert_called_once()
+            self.assertIn('control_status',runner.call_args.args[0])
+            self.assertNotIn('manual_auto',runner.call_args.args[0])
+
+    def test_never_stop_daemon_if_manual_active_or_rescue_not_verified(self):
+        safe={'active':False,'one_shot_used':True,'rearm_pending':False,
+              'watchdog_armed':False,
+              'last_end_reason':'guard_terminated_gpu_temperature_timestamp_invalid_rescue_verified_restart_service'}
+        cases=[
+            dict(safe,active=True),dict(safe,rearm_pending=True),
+            dict(safe,watchdog_armed=True),dict(safe,one_shot_used=False),
+            dict(safe,last_end_reason='begin_failed_rescue_pending'),
+            dict(safe,last_end_reason='rescue_unverified_restart_service'),
+        ]
+        for status in cases:
+            with self.subTest(status=status),patch.object(pkg,'loaded',return_value=True),\
+                 patch.object(pkg,'run') as runner,patch.object(pkg,'inspect_auto') as inspect,\
+                 patch.object(pkg,'stop_job') as stop:
+                runner.return_value=Mock(returncode=0,stdout=json.dumps({'ok':True,'data':status}))
+                self.assertFalse(pkg.retire_verified_latched_service(501))
+                inspect.assert_not_called()
+                stop.assert_not_called()
+
+    def test_never_stop_daemon_if_rm_auto_readback_failed(self):
+        state={'active':False,'one_shot_used':True,'rearm_pending':False,
+               'watchdog_armed':False,'last_end_reason':'guard_terminated_sensor_rescue_verified_restart_service'}
+        with patch.object(pkg,'loaded',return_value=True),patch.object(pkg,'run') as runner,\
+             patch.object(pkg,'inspect_auto',side_effect=RuntimeError('RM AUTO not verified')),\
+             patch.object(pkg,'stop_job') as stop:
+            runner.return_value=Mock(returncode=0,stdout=json.dumps({'ok':True,'data':state}))
+            with self.assertRaisesRegex(RuntimeError,'RM AUTO not verified'):
+                pkg.retire_verified_latched_service(501)
+            stop.assert_not_called()
 
     def test_inspect_auto_does_not_write(self):
         records=[{'policy_word_candidate':0,'requested_q16_candidate':0,'rpm_min_candidate':1150,'rpm_max_candidate':3700}]*2
@@ -160,10 +226,26 @@ class TransactionTests(unittest.TestCase):
         self.stop.assert_not_called();self.start.assert_not_called()
         self.assertFalse(self.app.exists());self.assertFalse(self.plist.exists())
 
+    def test_upgrade_recovers_only_verified_post_rescue_idle_daemon(self):
+        self.simulate_v014('0.15.5')
+        lease=pkg.base.LOCKS[1]
+        calls=[0]
+        def locked_once(path):
+            if path==lease and calls[0]==0:
+                calls[0]+=1
+                raise RuntimeError('installer_lock_busy:'+str(path))
+            return os.open(path,os.O_CREAT|os.O_RDWR,0o600)
+        self.acquire.side_effect=locked_once
+        with patch.object(pkg,'retire_verified_latched_service',return_value=True) as retire:
+            pkg.install(self.payload,501)
+            retire.assert_called_once_with(501)
+        self.assertEqual(pkg.installed_state(501),'same')
+        self.assertTrue(self.app.exists())
+
     def simulate_v014(self,version='0.14.0'):
         pkg.install(self.payload,501)
         self.back.rename(self.root/'original-v014-backup')
-        marker={'0.14.0':pkg.LEGACY_MARKER,'0.14.3':pkg.ADAPTIVE_MARKER,'0.14.4':pkg.ADAPTIVE_MARKER,'0.14.5':pkg.ADAPTIVE_MARKER,'0.14.6':pkg.FRESHNESS_MARKER,'0.14.7':pkg.SESSION_MARKER,'0.14.8':pkg.V0148_MARKER}.get(version,pkg.PREVIOUS_MARKER)
+        marker={'0.14.0':pkg.LEGACY_MARKER,'0.14.3':pkg.ADAPTIVE_MARKER,'0.14.4':pkg.ADAPTIVE_MARKER,'0.14.5':pkg.ADAPTIVE_MARKER,'0.14.6':pkg.FRESHNESS_MARKER,'0.14.7':pkg.SESSION_MARKER,'0.14.8':pkg.V0148_MARKER,'0.15.0':pkg.V0150_MARKER,'0.15.1':pkg.V0151_MARKER,'0.15.2':pkg.V0152_MARKER,'0.15.3':pkg.V0153_MARKER,'0.15.4':pkg.V0154_MARKER,'0.15.5':pkg.V0155_MARKER,'0.15.6':pkg.V0156_MARKER,'0.15.7':pkg.V0157_MARKER,'0.15.8':pkg.V0158_MARKER,'0.16.0':pkg.V0160_MARKER}.get(version,pkg.PREVIOUS_MARKER)
         (self.root/'nvmetrics-agent').write_bytes(marker)
         (self.app/'Contents/Resources/nvmetrics-agent').write_bytes(marker)
         (self.rt/'nvmetrics-runtime').write_text('previous frozen runtime')
@@ -181,7 +263,7 @@ class TransactionTests(unittest.TestCase):
         self.assertEqual(pkg.installed_state(501),'same')
         self.assertEqual((self.back/'Runtime/nvmetrics-runtime').read_text(),'previous frozen runtime')
         self.assertTrue((self.root/'original-v014-backup').exists())
-        self.assertTrue((self.app.parent/'.NVMetrics.app.before-v0160').exists())
+        self.assertTrue((self.back/'Previous.app').exists())
 
     def test_upgrade_from_verified_v0141(self):
         self.simulate_v014('0.14.1')
@@ -228,7 +310,7 @@ class TransactionTests(unittest.TestCase):
         self.assertEqual(pkg.installed_state(501),'upgrade')
         pkg.install(self.payload,501)
         self.assertEqual(pkg.installed_state(501),'same')
-        self.assertEqual(json.loads(self.receipt.read_text())['version'],'0.16.0')
+        self.assertEqual(json.loads(self.receipt.read_text())['version'],'0.16.1')
         self.assertEqual((self.back/'Runtime/nvmetrics-runtime').read_text(),'previous frozen runtime')
         self.assertIn(pkg.MARKER,(self.root/'nvmetrics-agent').read_bytes())
         self.assertTrue(old_back.exists());self.assertTrue(old_app.exists())
@@ -251,20 +333,6 @@ class TransactionTests(unittest.TestCase):
         self.assertEqual(pkg.installed_state(501),'same')
         self.assertTrue((self.root/'nvmetrics-setting.sh').exists())
 
-    def test_upgrade_from_verified_v0150(self):
-        record=self.simulate_v014('0.15.0')
-        (self.root/'nvmetrics-agent').write_bytes(pkg.V0150_MARKER)
-        (self.app/'Contents/Resources/nvmetrics-agent').write_bytes(pkg.V0150_MARKER)
-        record['files']['nvmetrics-agent']=pkg.sha(self.root/'nvmetrics-agent')
-        record['app']=pkg.tree_digest(self.app)
-        self.receipt.write_text(json.dumps(record))
-        (self.root/'.v0150-package-backup').mkdir()
-        (self.app.parent/'.NVMetrics.app.before-v0150').mkdir()
-        self.assertEqual(pkg.installed_state(501),'upgrade')
-        pkg.install(self.payload,501)
-        self.assertEqual(pkg.installed_state(501),'same')
-        self.assertTrue((self.root/'.v0150-package-backup').exists())
-
     def test_one_revision_everywhere(self):
         # The installer accepts the service only when its ping names this revision, and the package only when its
         # agent carries this revision's marker: a bump that misses one of these fails every install.
@@ -286,10 +354,184 @@ class TransactionTests(unittest.TestCase):
         # each revision keeps its own backups: under a name another revision already used, the upgrade is refused
         installer=Path(pkg.__file__).read_text()
         self.assertIn("BACK = ROOT/'.v%s-package-backup'"%digits,installer)
-        self.assertIn("'.NVMetrics.app.before-v%s'"%digits,installer)
+        self.assertIn("backup_app=BACK/'Previous.app'",installer)
+
+    def test_upgrade_from_0150_preserves_previous_backups(self):
+        self.simulate_v014('0.15.0')
+        old_back=self.root/'.v0150-package-backup';old_back.mkdir()
+        old_app=self.app.parent/'.NVMetrics.app.before-v0150';old_app.mkdir()
+        self.assertEqual(pkg.installed_state(501),'upgrade')
+        pkg.install(self.payload,501)
+        self.assertEqual(pkg.installed_state(501),'same')
+        self.assertTrue(old_back.exists());self.assertTrue(old_app.exists())
+
+    def test_upgrade_from_0151_preserves_previous_backups(self):
+        self.simulate_v014('0.15.1')
+        old_back=self.root/'.v0151-package-backup';old_back.mkdir()
+        old_app=self.app.parent/'.NVMetrics.app.before-v0151';old_app.mkdir()
+        self.assertEqual(pkg.installed_state(501),'upgrade')
+        pkg.install(self.payload,501)
+        self.assertEqual(pkg.installed_state(501),'same')
+        self.assertTrue(old_back.exists());self.assertTrue(old_app.exists())
+
+    def test_upgrade_from_0152_moves_app_backup_outside_applications(self):
+        self.simulate_v014('0.15.2')
+        old_back=self.root/'.v0152-package-backup';old_back.mkdir()
+        old_app=self.app.parent/'.NVMetrics.app.before-v0152';old_app.mkdir()
+        self.assertEqual(pkg.installed_state(501),'upgrade')
+        pkg.install(self.payload,501)
+        self.assertEqual(pkg.installed_state(501),'same')
+        self.assertTrue((self.back/'Previous.app').exists())
+        self.assertTrue(old_back.exists());self.assertTrue(old_app.exists())
+
+    def test_upgrade_from_0153_preserves_old_backups_and_verifies_icon_release(self):
+        # A 0.15.3 receipt must migrate to 0.15.4, rather than being
+        # mistaken for the already-installed release and skipping the new icon.
+        self.simulate_v014('0.15.3')
+        old_back=self.root/'.v0153-package-backup';old_back.mkdir()
+        self.assertEqual(pkg.installed_state(501),'upgrade')
+        pkg.install(self.payload,501)
+        self.assertEqual(pkg.installed_state(501),'same')
+        self.assertTrue(old_back.exists())
+        self.assertTrue((self.back/'Previous.app').exists())
+        self.assertEqual(json.loads(self.receipt.read_text())['version'],'0.16.1')
+
+    def test_missing_gui_with_verified_0153_receipt_is_repaired(self):
+        # An external deletion of the GUI must not strand a correctly
+        # installed and still authenticated root helper.
+        self.simulate_v014('0.15.3')
+        shutil.rmtree(self.app)
+        self.assertEqual(pkg.installed_state(501),'upgrade')
+        pkg.install(self.payload,501)
+        self.assertTrue(self.app.is_dir())
+        self.assertEqual(pkg.installed_state(501),'same')
+        self.assertTrue((self.back/'Runtime/nvmetrics-runtime').exists())
+        self.assertFalse((self.back/'Previous.app').exists())
+        self.assertEqual(json.loads(self.receipt.read_text())['version'],pkg.VERSION)
+
+    def test_missing_gui_same_revision_is_reinstalled(self):
+        pkg.install(self.payload,501)
+        self.back.rename(self.root/'previous-backup')
+        shutil.rmtree(self.app)
+        self.assertEqual(pkg.installed_state(501),'upgrade')
+        pkg.install(self.payload,501)
+        self.assertTrue(self.app.is_dir())
+        self.assertEqual(pkg.installed_state(501),'same')
+
+    def test_missing_gui_does_not_bypass_privileged_integrity(self):
+        self.simulate_v014('0.15.3')
+        shutil.rmtree(self.app)
+        (self.root/'server.py').write_text('tampered root server')
+        with self.assertRaisesRegex(RuntimeError,'installed file changed'):
+            pkg.installed_state(501)
+        self.stop.assert_not_called()
+
+    def test_modified_gui_still_refused(self):
+        self.simulate_v014('0.15.3')
+        (self.app/'unexpected').write_text('modified')
+        with self.assertRaisesRegex(RuntimeError,'installed package differs'):
+            pkg.installed_state(501)
+
+    def test_upgrade_from_0154_is_a_real_update(self):
+        # An installed 0.15.4 must receive the new GUI behavior.
+        self.simulate_v014('0.15.4')
+        self.assertEqual(pkg.installed_state(501),'upgrade')
+        pkg.install(self.payload,501)
+        self.assertEqual(pkg.installed_state(501),'same')
+        self.assertEqual(json.loads(self.receipt.read_text())['version'],'0.16.1')
+
+    def test_upgrade_from_0155_preserves_verified_guard_and_app_backup(self):
+        self.simulate_v014('0.15.5')
+        old_back=self.root/'.v0155-package-backup';old_back.mkdir()
+        self.assertEqual(pkg.installed_state(501),'upgrade')
+        pkg.install(self.payload,501)
+        self.assertEqual(pkg.installed_state(501),'same')
+        self.assertTrue(old_back.exists())
+        self.assertTrue((self.back/'Previous.app').exists())
+        self.assertEqual(json.loads(self.receipt.read_text())['version'],'0.16.1')
+
+    def test_upgrade_from_0156_is_not_same_and_preserves_its_backups(self):
+        # 0.15.7 regression: an installed 0.15.6 must be an UPGRADE. With the old VERSION the installer
+        # answered 'same' and returned without installing the new guard, service or app.
+        self.simulate_v014('0.15.6')
+        old_back=self.root/'.v0156-package-backup';old_back.mkdir()
+        self.assertEqual(pkg.installed_state(501),'upgrade')
+        pkg.install(self.payload,501)
+        self.assertEqual(pkg.installed_state(501),'same')
+        self.assertTrue(old_back.exists())
+        self.assertTrue((self.back/'Previous.app').exists())
+        self.assertIn(pkg.MARKER,(self.root/'nvmetrics-agent').read_bytes())
+        self.assertNotIn(pkg.V0156_MARKER,(self.root/'nvmetrics-agent').read_bytes())
+        self.assertEqual(json.loads(self.receipt.read_text())['version'],'0.16.1')
+
+    def test_upgrade_from_0157_is_not_same_and_preserves_its_backups(self):
+        # 0.15.8: the RTX 5050 that reproduced the RUSD fault runs 0.15.7; it must be upgraded, not 'same'
+        self.simulate_v014('0.15.7')
+        old_back=self.root/'.v0157-package-backup';old_back.mkdir()
+        older=self.root/'.v0156-package-backup';older.mkdir()
+        self.assertEqual(pkg.installed_state(501),'upgrade')
+        pkg.install(self.payload,501)
+        self.assertEqual(pkg.installed_state(501),'same')
+        self.assertTrue(old_back.exists() and older.exists())
+        self.assertTrue((self.back/'Previous.app').exists())
+        self.assertIn(pkg.MARKER,(self.root/'nvmetrics-agent').read_bytes())
+        self.assertNotIn(pkg.V0157_MARKER,(self.root/'nvmetrics-agent').read_bytes())
+        self.assertEqual(json.loads(self.receipt.read_text())['version'],'0.16.1')
+
+    def test_upgrade_from_0158_preserves_carbon_backup(self):
+        self.simulate_v014('0.15.8')
+        old_back=self.root/'.v0158-package-backup';old_back.mkdir()
+        self.assertEqual(pkg.installed_state(501),'upgrade')
+        pkg.install(self.payload,501)
+        self.assertEqual(pkg.installed_state(501),'same')
+        self.assertTrue(old_back.exists())
+        self.assertTrue((self.back/'Previous.app').exists())
+        self.assertIn(pkg.MARKER,(self.root/'nvmetrics-agent').read_bytes())
+        self.assertEqual(json.loads(self.receipt.read_text())['version'],pkg.VERSION)
+
+    def test_0158_wrong_uid_is_refused(self):
+        self.simulate_v014('0.15.8')
+        with self.assertRaisesRegex(RuntimeError,'different authorized console UID'):
+            pkg.installed_state(502)
+
+    def test_0158_wrong_agent_is_refused(self):
+        record=self.simulate_v014('0.15.8')
+        (self.root/'nvmetrics-agent').write_bytes(pkg.V0157_MARKER)
+        record['files']['nvmetrics-agent']=pkg.sha(self.root/'nvmetrics-agent')
+        self.receipt.write_text(json.dumps(record))
+        with self.assertRaisesRegex(RuntimeError,'wrong previous agent'):
+            pkg.installed_state(501)
+
+    def test_unknown_revision_is_refused(self):
+        self.simulate_v014('0.15.9')
+        with self.assertRaisesRegex(RuntimeError,'unsupported installed NVMetrics revision'):
+            pkg.installed_state(501)
+
+    def test_upgrade_from_0160_preserves_backup(self):
+        self.simulate_v014('0.16.0')
+        old_back=self.root/'.v0160-package-backup';old_back.mkdir()
+        self.assertEqual(pkg.installed_state(501),'upgrade')
+        pkg.install(self.payload,501)
+        self.assertTrue(old_back.exists())
+        self.assertEqual(pkg.installed_state(501),'same')
+
+    def test_0157_receipt_with_wrong_agent_is_refused(self):
+        self.simulate_v014('0.15.7')
+        (self.root/'nvmetrics-agent').write_bytes(pkg.V0156_MARKER)
+        record=json.loads(self.receipt.read_text());record['files']['nvmetrics-agent']=pkg.sha(self.root/'nvmetrics-agent')
+        self.receipt.write_text(json.dumps(record))
+        with self.assertRaisesRegex(RuntimeError,'wrong previous agent'):pkg.installed_state(501)
+
+    def test_0156_receipt_with_wrong_agent_is_refused(self):
+        # a 0.15.6 receipt is accepted only with the 0.15.6 agent marker on disk
+        self.simulate_v014('0.15.6')
+        (self.root/'nvmetrics-agent').write_bytes(pkg.V0155_MARKER)
+        record=json.loads(self.receipt.read_text());record['files']['nvmetrics-agent']=pkg.sha(self.root/'nvmetrics-agent')
+        self.receipt.write_text(json.dumps(record))
+        with self.assertRaisesRegex(RuntimeError,'wrong previous agent'):pkg.installed_state(501)
 
     def test_upgrade_handshake_failure_restores_runtime_app_and_receipt(self):
-        record=self.simulate_v014()
+        record=self.simulate_v014('0.15.8')
         self.client.side_effect=RuntimeError('upgrade handshake failed')
         with self.assertRaisesRegex(RuntimeError,'upgrade handshake failed'):pkg.install(self.payload,501)
         self.assertEqual(json.loads(self.receipt.read_text()),record)

@@ -8,6 +8,14 @@ int main(void){
     struct nvm_guard_sample idle={42,62,18,0,1};
     struct nvm_guard_sample work={42.62,62,18.45,21,1};
     nvm_guard_thermal_profile=1;
+    /* Root cause regression: 49 C is safe if *all* independent inputs
+       are valid; 60 C and stale telemetry still block entry. */
+    assert(nvm_guard_entry_ok((struct nvm_guard_sample){49,70,42,3,1}));
+    assert(nvm_guard_entry_ok((struct nvm_guard_sample){50,70,42,3,1}));
+    assert(nvm_guard_entry_ok((struct nvm_guard_sample){55,70,42,3,1}));
+    assert(nvm_guard_entry_ok((struct nvm_guard_sample){59.9,70,42,3,1}));
+    assert(!nvm_guard_entry_ok((struct nvm_guard_sample){49,70,42,3,0}));
+    assert(!nvm_guard_entry_ok((struct nvm_guard_sample){60,70,42,3,1}));
     struct nvm_guard_sample observed={55.8,78,47.81,1,1};
     struct nvm_guard_state observed_state={0};
     assert(nvm_guard_start(&observed_state,observed,1000));

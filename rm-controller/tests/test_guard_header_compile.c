@@ -43,6 +43,26 @@ static void rusd_snapshot(NV00DE_SHARED_DATA *live,NV00DE_SHARED_DATA *out){
     *out=fake_count?fake_samples[(fake_pos<fake_count)?fake_pos++:fake_count-1]:*live;
 }
 static NV00DE_SHARED_DATA *rusd_map(void){static NV00DE_SHARED_DATA d;return &d;}
+/* v0.15.7: the guard reads through rusd_guard_reader.h. This fake keeps the
+ * existing one-snapshot-per-sample scripting and reports each section as a
+ * plain RusdReadData() result (no seqlock retry; that has its own test). */
+#include "rusd_flight_recorder.h"
+static void nvm_guard_rusd_snapshot(NV00DE_SHARED_DATA *live,NV00DE_SHARED_DATA *s,struct nvm_fr_read rd[NVM_FR_NSRC]){
+    rusd_snapshot(live,s);
+    const uint64_t ts[NVM_FR_NSRC]={s->temperatures[0].lastModifiedTimestamp,s->temperatures[1].lastModifiedTimestamp,
+        s->instPowerUsage.lastModifiedTimestamp,s->fanCoolerStatus.lastModifiedTimestamp,s->perfDevUtil.lastModifiedTimestamp};
+    for(unsigned i=0;i<NVM_FR_NSRC;++i){
+        memset(&rd[i],0,sizeof rd[i]);
+        rd[i].ts=rd[i].live_before=rd[i].live_after=ts[i];
+        rd[i].ok=rd[i].first_ok=(uint8_t)nvm_ok(ts[i]);
+        if(!rd[i].ok)rd[i].first_cause=(uint8_t)nvm_fr_read_cause(ts[i],0,ts[i]);
+    }
+}
+static void nvm_guard_fr_values(const NV00DE_SHARED_DATA *s,struct nvm_fr_obs *o){
+    o->gpu_raw=(int32_t)(s->gpu_c*256);o->mem_raw=(int32_t)(s->mem_c*256);
+    o->power_mw=(uint32_t)s->instPowerUsage.info.instGpuPower;o->util_pct=s->util_pct;
+}
+static void nvm_guard_fr_abi(struct nvm_fr *fr){nvm_fr_abi(fr,sizeof(NV00DE_SHARED_DATA),0,0,0,0,0);}
 enum Fault { OK, PRE_GET_ERR, PRE_LAYOUT_ERR, PRE_STATE_ERR, PRE_ONE_FAN, SET_ERR, UNCHANGED, POST_GET_ERR, POST_LAYOUT_ERR, POST_ONE_FAN, POST_WRONG };
 static enum Fault fault;
 static unsigned get_calls,set_calls,default_calls;

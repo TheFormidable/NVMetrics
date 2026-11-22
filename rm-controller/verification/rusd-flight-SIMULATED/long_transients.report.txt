@@ -1,0 +1,8 @@
+sesión run=0123456789abcdef pid=859
+  layout=620.70.06 sizeof=3184 off_temperatures=0 off_fan=0
+  salida=0 (user_auto) muestras=358 ventanas=16 conservadas=6 sobrescritas=10 caminos_reintento=16 con_reintentos=16 recuperados=16 retry_max_us=260 interrumpidos=0 max_gap_us=0 primera=gpu:seqlock_timeout
+  evento auto_verified pct=0 motivo=rm_readback_zero seq=358
+
+Lectura (solo lo que permiten estos datos):
+  16 lectura(s) chocaron con una publicación y se recuperaron con la relectura acotada. Confirma que hay colisiones de lectura con este productor; no indica por sí solo de qué lado está el fallo original.
+  Ninguna causa observada identifica el origen con certeza alta: hacen falta más sesiones o datos del productor.

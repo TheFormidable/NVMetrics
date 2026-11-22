@@ -17,7 +17,7 @@ struct FanCard: View {
         return Card(icon: "fanblades.fill", title: "Ventiladores") {
             if !slots.isEmpty {
                 ForEach(slots, id: \.self) { i in
-                    let rpm: Int? = measured.map { i < $0.count ? $0[i] : 0 }
+                    let rpm: Int? = measured.flatMap { i < $0.count ? $0[i] : nil }
                     InfoLine(name: "Ventilador \(i + 1)",
                              value: rpm.map { $0 == 0 ? "0 RPM · parado" : "\($0) RPM" } ?? "--")
                 }

@@ -47,7 +47,7 @@ final class FanGuardUIModel: ObservableObject {
         FanSelectionPolicy.nextStep(current: currentPercent, target: targetPercent, floor: manualFloor,
                                     load: loadProfile, thermal: thermalProfile) != nil
     }
-    var canBegin: Bool { !busy && !refreshing && !active && autoVerified && physicalEnabled && !oneShotUsed }
+    var canBegin: Bool { !busy && !active && autoVerified && physicalEnabled && !oneShotUsed }
     func selectPercent(_ percent: Int) {
         guard active && !busy && !ending else { return }
         targetPercent = FanSelectionPolicy.clamp(percent, floor: selectionFloor)
@@ -133,7 +133,8 @@ final class FanGuardUIModel: ObservableObject {
                    let rmReason = tx["reason"] as? String {
                     message = "Control finalizado: \(reason). RM: \(rmReason). Comprueba AUTO antes de reintentar."
                 } else {
-                    message = "Control finalizado: \(reason). Comprueba AUTO antes de reintentar."
+                    let trip = data["last_trip"] as? String ?? (data["last_guard_safety"] as? [String: Any])?["reason"] as? String
+                    message = "Control finalizado: \(reason)." + (trip.map { " Motivo: \($0)." } ?? "") + " Comprueba AUTO antes de reintentar."
                 }
             }
         }
@@ -143,6 +144,10 @@ final class FanGuardUIModel: ObservableObject {
 
     func refresh() {
         guard !refreshing && !active && !busy && rearmWatch == nil else { return }
+        // Preserve the last independently checked AUTO eligibility while
+        // a non-mutating refresh is in flight. The root service ALWAYS performs
+        // its own fresh AUTO/thermal preflight before allowing START.
+        let previouslyVerifiedAuto = autoVerified && available && physicalEnabled && !oneShotUsed
         refreshing = true
         Task {
             var r = await queryIPC(["control_status"])
@@ -153,10 +158,20 @@ final class FanGuardUIModel: ObservableObject {
                 await pause(1_000_000_000)
                 r = await queryIPC(["control_status"])
             }
+            // A user may begin Manual while this background refresh is in flight.
+            // Never let an older AUTO snapshot overwrite the starting session.
+            guard !busy && !active && session == nil else { refreshing = false; return }
             applyStatus(r)
+            if previouslyVerifiedAuto && available && physicalEnabled && !active && !oneShotUsed {
+                // Avoid a false OFF pulse on the button between status and
+                // read-only inspection. Never restore this when the service
+                // reports a session/rescue, failed status or disabled control.
+                autoVerified = true
+            }
             if available && !active && !oneShotUsed {
                 let inspection = await queryIPC(["inspect"])
                 let data = inspection["data"] as? [String: Any]
+                guard !busy && !active && session == nil else { refreshing = false; return }
                 autoVerified = (inspection["ok"] as? Bool) == true && (data?["mode"] as? String) == "auto"
                 rmStatus = autoVerified ? "Automático · verificado" : "AUTO no verificado · Manual no disponible"
             }
@@ -169,9 +184,10 @@ final class FanGuardUIModel: ObservableObject {
             message = oneShotUsed ? "Esperando a que el rescate root confirme AUTO antes de otra sesión." :
                                     "Espera la conexión y verificación automática del servicio.";return
         }
-        busy = true; autoRequested = false; autoVerified = false; targetPercent = manualFloor
+        busy = true; autoRequested = false; autoVerified = false; targetPercent = 50
         rearmWatch?.cancel(); rearmWatch = nil
-        message = "Validando sensores y armando rescate…"
+        rmStatus = "Activando Manual · verificando GPU, guard y tacómetros…"
+        message = "Solicitud enviada. Manual se confirmará únicamente después de RM SET/GET y RPM reales."
         Task {
             let r = await queryIPC(["manual_begin"])
             guard (r["ok"] as? Bool) == true,
@@ -190,8 +206,23 @@ final class FanGuardUIModel: ObservableObject {
                     message = "El modo anterior todavía no se ha verificado como AUTO. Comprueba RM antes de reintentar."
                 } else if refusal == "preflight_telemetry_not_fresh" {
                     message = "Telemetría sin actualizar: no se permite activar Manual."
+                } else if refusal == "guard_entry_critical_sensor_freshness_unverified" ||
+                          refusal == "guard_start_critical_sensor_freshness_unverified" {
+                    message = "El guard rechazó el arranque porque alguna fuente crítica no avanzó. No es un límite de 49 °C. Revisa los campos ts_* y age_* de guard-last.stderr.log."
+                } else if refusal.hasPrefix("guard_entry_") || refusal.hasPrefix("guard_start_") {
+                    message = "El guard rechazó la entrada: " + refusal + ". Comprueba temperaturas, potencia, frescura y log nativo."
                 } else {
                     message = "Manual rechazado: " + refusal
+                }
+                if let detail = r["details"] as? [String: Any],
+                   let sample = detail["sample"] as? [String: Any] {
+                    var reading: [String] = []
+                    if let gpu = (sample["gpu_c"] as? NSNumber)?.doubleValue { reading.append(String(format: "GPU %.1f °C",gpu)) }
+                    if let mem = (sample["mem_c"] as? NSNumber)?.doubleValue { reading.append(String(format: "VRAM %.1f °C",mem)) }
+                    if let power = (sample["power_w"] as? NSNumber)?.doubleValue { reading.append(String(format: "%.1f W",power)) }
+                    if let utilization = sample["util_gpu_pct"] as? Int { reading.append("uso \(utilization) %") }
+                    if sample["fresh"] as? Bool == false { reading.append("telemetría no fresca") }
+                    if !reading.isEmpty { message = (message ?? refusal) + " · Lecturas root: " + reading.joined(separator: ", ") }
                 }
                 busy = false; refresh();return
             }
@@ -199,25 +230,13 @@ final class FanGuardUIModel: ObservableObject {
             applyStatus(r)
             if autoRequested { busy = false; restoreAuto(); return }
             rearmWatch?.cancel();rearmWatch = nil
-            // The only physically validated spin-up is START 50. Automatically
-            // walk down to the requested floor, not a direct 0 RPM -> 30 write.
-            // Each step retains the original RM and tachometer verification.
-            let reached = await transition(to: manualFloor, token: token)
-            if !reached || autoRequested {
-                if !autoRequested && lowMarginRefused && active && available && readbackConfirmed && session == token && FanSelectionPolicy.canKeepVerifiedStep(current: currentPercent, floor: manualFloor) {
-                    targetPercent = currentPercent; busy = false
-                    message = "Manual activo al \(currentPercent) %. El 30 % requiere más margen térmico/eléctrico. Puedes aumentar o intentar bajar cuando mejore."
-                    heartbeat(token); return
-                }
-                if active && session == token {
-                    message = "No se confirmó el mínimo manual; regresando a AUTO."
-                    busy = false; restoreAuto(); return
-                }
-                busy = false; autoRequested = false; watchForRescueCompletion(); return
-            }
+            // START 50 is the native guard's tested entry point. Leave the GPU
+            // at the verified 50% instead of silently descending to 30% in
+            // several slow, safety-checked steps. A lower target is applied
+            // only after the user explicitly requests it.
             targetPercent = currentPercent
             busy = false
-            message = "Manual activo al \(currentPercent) % · RM verificado."
+            message = "Manual activo al \(currentPercent) % · RM verificado. Selecciona una velocidad y pulsa Aplicar."
             heartbeat(token)
         }
     }

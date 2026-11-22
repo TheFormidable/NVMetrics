@@ -1,0 +1,2 @@
+fan guard: DIAG trip=gpu_temperature_timestamp_invalid gpu_c=nan mem_c=74.00 power_w=30.00 util_pct=2 fan_fresh=0 heartbeat_age_ms=503 rusd_cause=gpu:write_in_progress gpu_ts=18446744073709551615 mem_ts=2000031 power_ts=3000031 fan_ts=4000031
+fan guard: RUSD_FR summary samples=31 post_auto=6 windows=1 overwritten=0 retry_paths=1 seqlock_retried=0 recovered=0 retry_max_us=13388 preempted=0 max_gap_us=0 first=gpu:write_in_progress sink=jsonl

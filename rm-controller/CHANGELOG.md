@@ -1,11 +1,71 @@
-# 0.16.0 — candidato de robustez y diagnóstico
+# 0.16.1 — candidato Carbon y migración
 
-- Doctor de solo lectura desde la barra de menús, con reporte resumido sin tokens, UID ni identificadores de hardware.
-- Telemetría: descarta callbacks ajenos a la generación activa, limita tramas e historial, invalida lecturas obsoletas, no abre otro cliente RM hasta terminar el anterior y reconecta al despertar.
-- IPC cliente: plazo total por solicitud, validación estricta de versión y pruebas con respuestas parciales.
-- Migración de 0.15.0 con backups nuevos, sin cambiar ninguna política de ventiladores.
-- CI nativa: typecheck del overlay completo que realmente compila el paquete.
-- Pendiente de validación nativa y física; no es un release estable.
+- Integra el trabajo de 0.16.0 sobre el código 0.15.8 real (Carbon y Flight Recorder), sin sustituir el control térmico por el de 0.15.0.
+- Migración desde 0.15.8 y 0.16.0 con marcador específico, hashes, UID y AUTO; informa por separado versión no reconocida y UID distinto.
+- Doctor de solo lectura, recuperación del monitor y plazos IPC absolutos. Mantiene la cadencia inicial de 500 ms del dashboard.
+- No incluye los cambios de escritura de ventiladores de 0.15.9. Pendiente de validación nativa.
+
+# 0.15.8 — reintento RUSD sin espera (fallo reproducido en RTX 5050)
+
+- El Flight Recorder reprodujo el fallo en hardware: `first_ok=0`, `first_cause=write_in_progress`, `retries=0`, `retry_us=13388`. El `nanosleep(250 µs)` del reintento, en un guard con QoS de fondo, volvió tras 13,4 ms; el presupuesto de 2 ms se agotó antes del primer reintento y el guard volvió a AUTO por una colisión de lectura transitoria.
+- El reintento ya no duerme: 1.er reintento inmediato, luego espera activa de 40 µs (CPU pause + reloj monotónico), 2 ms de observación por sección, tope de 64 llamadas y de 200 000 iteraciones. Tras una interrupción del planificador (≥500 µs) se hace un único intento inmediato más. Solo se aceptan copias nuevas y coherentes; `ts = 0` nunca se reintenta.
+- Causas nuevas en el recorder, `safety_metrics.rusd_cause` y el analizador: `retry_budget_exhausted`, `scheduler_preempted`, `producer_write_persistent`; final de reintento por fuente (`retry_end`, `preempted`, `max_gap_us`, `obs`/`wip_obs`).
+- `retry_max_us` cuenta también los caminos de reintento sin reintentos (`retry_paths`); `retry_us` pasa a 32 bits. El TRIP se atribuye a la muestra que disparó aunque haya una ventana anterior abierta. El analizador trata un log vacío como no concluyente (código 1) y marca los registros 0.15.7 sin reintentos.
+- Versión 0.15.8 en app, agente, servicio, instalador, recibos y scripts; migración desde 0.15.7 probada. No cambian los límites térmicos, RM SET/GET, heartbeat, watchdog, rescate ni la restauración AUTO. No se modifica el driver.
+
+# 0.15.7 — RUSD Flight Recorder (diagnóstico; pendiente de hardware)
+
+- El guard root lee sus 5 secciones RUSD con `RusdReadData()` conservando su resultado y el timestamp vivo antes y después. Las causas son distintas por fuente: `ts_zero_producer_invalid`, `seqlock_timeout`, `write_in_progress`, `seq_marker_abi`, `read_inconsistent`, `ts_frozen`, `ts_backwards`, `value_out_of_range`, `clock_anomaly`. `safety_metrics` añade `rusd_cause` y `rusd.*`; `reason` no cambia.
+- **AUTO antes de cualquier E/S diagnóstica.** Las líneas `termination`, `safety_metrics`, `DIAG` y los registros de fallo RM se formatean en memoria y se escriben después del intento de AUTO, en el mismo orden. Con AUTO no verificado solo salen las líneas de protocolo, sin bloquear, y nada más.
+- **Sin escrituras durante Manual.** Las ventanas de anomalía se guardan en memoria (las 3 primeras y las 3 más recientes) y los contadores cubren todas las muestras. El único volcado a `rusd-flight.jsonl` ocurre al terminar, tras AUTO verificado. Las notas `RUSD_CONFIRM` y `telemetry_gap` también se difieren.
+- Relectura acotada si `RusdReadData()` agota sus intentos con `WRITE_IN_PROGRESS`: como máximo 3 veces en 2 ms, sin datos antiguos y nunca con `ts = 0`.
+- El analizador `diagnostics/rusd_flight_report.py` usa `session_summary.causes` y expresa la certeza de cada causa.
+- Paquete 0.15.7: una 0.15.6 instalada se actualiza (antes el instalador la daba por `same`). No cambian los límites térmicos, RM SET/GET, heartbeat, watchdog ni el rescate. Ver `RUSD-FLIGHT-RECORDER.md`.
+
+# 0.15.6 — entrada a Manual y diagnóstico real de 49 °C
+
+- El perfil térmico existente permite 49–59,9 °C con sensores válidos, AUTO verificado y demás requisitos. Se añaden pruebas C y Python para demostrar que **49 °C no es un límite**; permanecen el máximo estricto de 60 °C y las demás protecciones.
+- El guard nativo registra cada rechazo de entrada con la causa exacta, perfil activo, temperaturas, potencia, utilización y estado/frescura de los cuatro relojes RUSD. El servicio conserva el evento y la GUI muestra el motivo y la lectura de telemetría root.
+- Un rechazo **antes de START 50 y sin rescate armado** ya no inutiliza indefinidamente las sesiones: el servicio cierra el guard, verifica mediante una nueva lectura RM que ambos registros están en AUTO y solo entonces reabre la posibilidad de iniciar. Si existe rescate armado, escritura posible, firmware no AUTO o error de verificación, sigue bloqueado.
+- Añadidas pruebas contra rearme indebido tras RM manual y contra fallos de frescura. No se modifican los límites térmicos, pasos de 5 %, watchdog, rescate ni RM ABI.
+- La revisión requiere una nueva compilación y validación de hardware de la causa específica que se observa al llegar a ~49 °C.
+
+# 0.15.5 — Manual sin bloqueos de interfaz
+
+- Un solo clic solicita el inicio de Manual; sin diálogo redundante. El guard y rescate siguen activos.
+- La actualización de AUTO en segundo plano ya no bloquea el botón ni sobrescribe una nueva sesión con respuestas anteriores.
+- La interfaz muestra explícitamente la validación de sensores, RM SET/GET y tacómetros antes de afirmar el estado Manual.
+- Migración verificada de 0.15.4; no se cambian los límites térmicos, el protocolo físico ni los requisitos de AUTO.
+
+# 0.15.4 — icono macOS (sin cambios de control físico)
+
+- Reemplaza `app/Resources/AppIcon.png` con el diseño metálico Apple/NVIDIA aportado por el usuario, recortado, centrado y con alfa exterior transparente a 1024 × 1024 píxeles.
+- `build_package.sh` sigue generando el `AppIcon.icns` multirresolución desde ese PNG y declara `CFBundleIconFile`.
+- Actualiza versión de app, agente, servicio e instalador a 0.15.4. La migración desde una 0.15.3 verificada utiliza nuevo respaldo y mantiene las comprobaciones de integridad, estado AUTO y recuperación; el instalador no debe confundir el icono nuevo con la misma versión ya instalada.
+- No modifica escritura RM, pasos de ventilador, termoprotecciones ni ABI del driver. Validación de icono realizada con inspección RGBA local; compilación nativa macOS pendiente.
+
+# 0.15.3 — Carbon
+
+- Reconstrucción de la interfaz principal con arquitectura de tarjetas, gráfica de doble escala y ventiladores visibles.
+- Ventana nueva de 840 × 570 pt por defecto, limitada al área visible; adaptación a dos columnas en pantallas estrechas.
+- Controles rápidos Eco, Reposo y Boost, sin cambiar las protecciones RM.
+- Respaldo de la aplicación anterior dentro del respaldo protegido del instalador, no en Aplicaciones.
+- Pendiente de compilación y validación visual nativas.
+
+# 0.15.2 — candidato de panel compacto
+
+- Navegación lateral, placa de marca angular, cuatro apariencias persistentes y barras de telemetría segmentadas.
+- Tamaño inicial más compacto, paneles adaptables y estado RM con AUTO fuera del área desplazable.
+- Conserva controles reales, protecciones, icono y restauración de 0.15.1. Sin controles ficticios.
+- Instalador con identidad nueva y migración desde 0.15.0 y 0.15.1.
+- Pendiente de compilación y comprobación visual nativas.
+
+# 0.15.1 — candidato de interfaz adaptable y recuperación
+
+- Ventana desplazable y redimensionable con tamaño inicial limitado al espacio visible; tarjetas adaptables y acceso a AUTO fijo en la cabecera.
+- Icono de aplicación con recorte proporcional, margen transparente y recurso ICNS multirresolución generado al construir.
+- Rearme tras pérdida de comunicación solo si el guard nativo termina por EOF explícito, confirma AUTO sin fallo y el rescate independiente verifica AUTO. No se reanuda Manual automáticamente. Fallos no cualificados permanecen bloqueados. Sin cambios de límites, watchdog o escalones.
+- Migración desde 0.15.0 con respaldo separado y comprobación de integridad previa. Pruebas Python sin hardware; compilación, interfaz y recuperación física pendientes en macOS.
 
 # 0.15.0 — Manual continuo (candidato de prueba local)
 

@@ -74,6 +74,23 @@ class ThermalSupervisorTests(unittest.TestCase):
         self.assertTrue(self.p.status()['one_shot_used'])
         self.assertFalse(self.p.status()['rearm_pending'])
 
+    def test_client_disconnect_requires_native_and_independent_auto(self):
+        self.fake_exit('client_disconnected',rc=12,rescue_rc=None)
+        self.p.guard.stdout=io.BytesIO(b'{"operation":"guard","event":"termination","reason":"client_disconnected"}\n{"operation":"guard","event":"auto_verified","pct":0}\n')
+        self.p.stop('client_lease_expired')
+        self.p.failure=True
+        self.assertTrue(self.p.status()['rearm_pending'])
+        self.p.rescue.poll.return_value=0
+        self.assertFalse(self.p.status()['one_shot_used'])
+        self.assertEqual(self.p.last_end,'auto_independently_verified_ready')
+
+    def test_client_disconnect_without_native_auto_remains_latched(self):
+        self.fake_exit('client_disconnected',rc=12,auto=False)
+        self.p.failure=True
+        self.p.stop('client_lease_expired')
+        self.assertTrue(self.p.status()['one_shot_used'])
+        self.assertFalse(self.p.status()['rearm_pending'])
+
     def test_failed_rescue_never_rearms(self):
         self.fake_exit('gpu_temperature_limit',rescue_rc=4)
         self.assertTrue(self.p.status()['one_shot_used'])

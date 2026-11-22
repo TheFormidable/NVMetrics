@@ -14,6 +14,8 @@ enum Agent {
     var refuseLower = false
     var autoFails = false
     var blockBegin = false
+    var blockInspect = false
+    var inspectWaiter: CheckedContinuation<Void, Never>?
     var beginWaiter: CheckedContinuation<Void, Never>?
     var blockedLower: Int?
     var lowerWaiter: CheckedContinuation<Void, Never>?
@@ -27,7 +29,9 @@ enum Agent {
     func query(_ args: [String]) async -> [String: Any] {
         calls.append(args)
         switch args[0] {
-        case "inspect": return ["ok": true, "data": ["mode": "auto"]]
+        case "inspect":
+            if blockInspect { await withCheckedContinuation { inspectWaiter = $0 } }
+            return ["ok": true, "data": ["mode": "auto"]]
         case "manual_begin":
             if blockBegin { await withCheckedContinuation { beginWaiter = $0 } }
             percent = 50
@@ -96,17 +100,39 @@ final class PolicyAnswer: @unchecked Sendable {
             let ipc = FakeIPC()
             let model = await make(ipc)
             model.begin(); await until { model.active && !model.busy }
-            precondition(model.currentPercent == 30)
-            precondition(ipc.writes.map { $0[0] } == ["manual_begin"] + Array(repeating: "manual_lower", count: 4))
+            precondition(model.currentPercent == 50)
+            precondition(ipc.writes.map { $0[0] } == ["manual_begin"])
             let writes = ipc.writes.count
             model.selectPercent(100)
-            precondition(model.currentPercent == 30 && model.targetPercent == 100 && ipc.writes.count == writes)
+            precondition(model.currentPercent == 50 && model.targetPercent == 100 && ipc.writes.count == writes)
             model.applySelection(); await until { !model.busy }
             precondition(model.currentPercent == 100)
             model.selectPercent(30); model.applySelection(); await until { !model.busy }
             precondition(model.currentPercent == 30)
             precondition(ipc.writes.suffix(14).map { Int($0[2])! } == Array(stride(from: 95, through: 30, by: -5)))
             model.restoreAuto(); await until { !model.busy && !model.active }
+        }
+        do {
+            // A periodic background AUTO inspection may be slow, but it must
+            // not disable Manual or overwrite a newer verified session.
+            let ipc = FakeIPC()
+            let model = await make(ipc)
+            ipc.blockInspect = true
+            model.refresh()
+            await until { ipc.inspectWaiter != nil }
+            precondition(model.refreshing)
+            precondition(model.canBegin)
+            model.begin()
+            await until { model.active && !model.busy }
+            precondition(model.currentPercent == 50)
+            precondition(ipc.writes.map { $0[0] } == ["manual_begin"])
+            ipc.blockInspect = false
+            ipc.inspectWaiter?.resume()
+            ipc.inspectWaiter = nil
+            await until { !model.refreshing }
+            precondition(model.active && model.readbackConfirmed && model.currentPercent == 50)
+            model.restoreAuto()
+            await until { !model.busy && !model.active }
         }
         do {
             let ipc = FakeIPC(); ipc.blockBegin = true

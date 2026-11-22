@@ -21,12 +21,12 @@ import time
 import install_v012 as base
 from protocol import parse_agent
 
-VERSION = '0.16.0'
+VERSION = '0.16.1'
 ROOT = base.ROOT
 APP = Path('/Applications/NVMetrics.app')
 RUNTIME = ROOT/'Runtime'
 RECEIPT = ROOT/'.v014-package.json'
-BACK = ROOT/'.v0160-package-backup'
+BACK = ROOT/'.v0161-package-backup'
 FILES = ('server.py','backend.py','peer.py','physical.py','rescue.py','protocol.py','launchd_socket.py','nvmetrics-agent','nvmetrics-setting.sh')
 LEGACY = {
     'server.py':'aa833add4bd6377672441802fce5d38d9226862a98ca1b272e9e22e99378d64b',
@@ -37,7 +37,16 @@ LEGACY = {
     'protocol.py':'0b385a66267e1fec6f781b29c57e1fab0556b8bdaf3a5c6d8590b10f9527643e',
     'launchd_socket.py':'3f5645aaf924af8536586772a68c8e671418ad9b6797d2744233a38fdaaf8bf5',
 }
-MARKER = b'NVMETRICS_RM_V0160_DIAGNOSTICS'
+MARKER = b'NVMETRICS_RM_V0161_DIAGNOSTICS'
+V0158_MARKER = b'NVMETRICS_RM_V0158_CONTINUOUS'
+V0160_MARKER = b'NVMETRICS_RM_V0160_DIAGNOSTICS'
+V0157_MARKER = b'NVMETRICS_RM_V0157_CONTINUOUS'
+V0156_MARKER = b'NVMETRICS_RM_V0156_CONTINUOUS'
+V0155_MARKER = b'NVMETRICS_RM_V0155_CONTINUOUS'
+V0154_MARKER = b'NVMETRICS_RM_V0154_CONTINUOUS'
+V0153_MARKER = b'NVMETRICS_RM_V0153_CONTINUOUS'
+V0152_MARKER = b'NVMETRICS_RM_V0152_CONTINUOUS'
+V0151_MARKER = b'NVMETRICS_RM_V0151_CONTINUOUS'
 V0150_MARKER = b'NVMETRICS_RM_V0150_CONTINUOUS'
 V0149_MARKER = b'NVMETRICS_RM_V0149_AUDIT_HARDENING'
 V0148_MARKER = b'NVMETRICS_RM_V0148_BOOST_POLICY'
@@ -131,7 +140,14 @@ def acquire(path):
     try:
         base.safe_file(path)
         if os.fstat(fd).st_mode&0o077: raise RuntimeError('unsafe lock permissions')
-        fcntl.flock(fd,fcntl.LOCK_EX|fcntl.LOCK_NB)
+        try:
+            fcntl.flock(fd,fcntl.LOCK_EX|fcntl.LOCK_NB)
+        except BlockingIOError as exc:
+            # A physical/rescue lock must never be stolen, unlinked, or
+            # ignored during a package upgrade. Report precisely which
+            # lock owner must finish before the user retries.
+            raise RuntimeError('installer_lock_busy:'+str(path)+
+                               ' (verify RM AUTO; finish prior Manual/rescue; retry without forcing the lock)') from exc
         return fd
     except BaseException:
         os.close(fd)
@@ -162,6 +178,44 @@ def start_job():
     raise RuntimeError('launchd registration unsuccessful')
 
 
+def retire_verified_latched_service(uid):
+    """Retire an idle daemon holding the session lease after fail-closed rescue.
+
+    This is intentionally narrower than general server restart: a privileged
+    daemon has already disabled new Manual sessions, the independent rescue
+    verified firmware AUTO, and no active/watchdog session remains. The root
+    agent independently checks both regular/default RM records before bootout.
+    Do not force a daemon running Manual or waiting for rescue to exit.
+    """
+    if not loaded():
+        return False
+    client=APP/'Contents/Resources/GuardTools/Runtime/nvmetrics-runtime'
+    p=run(['/usr/bin/sudo','-n','-u',f'#{uid}','--',client,'client','control_status'],15)
+    if p.returncode != 0:
+        return False
+    try:
+        result=json.loads(p.stdout)
+        if result.get('ok') is not True:
+            return False
+        d=result.get('data')
+        if not isinstance(d,dict) or (
+            d.get('active') is not False or
+            d.get('one_shot_used') is not True or
+            d.get('rearm_pending') is not False or
+            d.get('watchdog_armed') is not False or
+            not str(d.get('last_end_reason','')).endswith('_rescue_verified_restart_service')
+        ):
+            return False
+    except (ValueError,TypeError,AttributeError):
+        return False
+    # A status flag is not enough: require a new RM GET proving that BOTH
+    # cooler records and the firmware default are AUTO before daemon bootout.
+    inspect_auto(ROOT/'nvmetrics-agent',qualified=True)
+    print('NVMetrics Installer: verified inactive fail-closed controller and independent rescue AUTO; stopping idle launchd service to release its lease.',flush=True)
+    stop_job()
+    return True
+
+
 def verify_client(uid,qualified=True):
     """Test real on-demand startup as the authorized non-root desktop UID."""
     client=APP/'Contents/Resources/GuardTools/Runtime/nvmetrics-runtime'
@@ -186,19 +240,27 @@ def installed_state(uid):
     if RECEIPT.exists():
         base.safe_file(RECEIPT)
         record=json.loads(RECEIPT.read_text())
-        if record.get('version') not in ('0.14.0','0.14.1','0.14.2','0.14.3','0.14.4','0.14.5','0.14.6','0.14.7','0.14.8','0.14.9','0.15.0',VERSION) or record.get('uid')!=uid:
-            raise RuntimeError('different installed package/authorized user')
+        if record.get('version') not in ('0.14.0','0.14.1','0.14.2','0.14.3','0.14.4','0.14.5','0.14.6','0.14.7','0.14.8','0.14.9','0.15.0','0.15.1','0.15.2','0.15.3','0.15.4','0.15.5','0.15.6','0.15.7','0.15.8','0.16.0',VERSION):
+            raise RuntimeError(f'unsupported installed NVMetrics revision: {record.get("version")!r}')
+        if record.get('uid')!=uid:
+            raise RuntimeError('installed package belongs to a different authorized console UID')
         base.safe_file(base.PLIST)
-        if sha(base.PLIST)!=record['plist'] or tree_digest(RUNTIME)!=record['runtime'] or tree_digest(APP)!=record['app']:
+        # The GUI can be deleted or moved while a verified privileged service
+        # remains installed. Recover a missing app only when the trusted receipt,
+        # launchd plist, frozen runtime, and all privileged files still match.
+        if sha(base.PLIST)!=record['plist'] or tree_digest(RUNTIME)!=record['runtime']:
+            raise RuntimeError('installed package differs; do not overwrite')
+        app_missing = not os.path.lexists(APP)
+        if not app_missing and tree_digest(APP)!=record['app']:
             raise RuntimeError('installed package differs; do not overwrite')
         for n in FILES:
-            if n=='nvmetrics-setting.sh' and record.get('version') not in ('0.14.9','0.15.0',VERSION):continue
+            if n=='nvmetrics-setting.sh' and record.get('version') not in ('0.14.9','0.15.0','0.15.1','0.15.2','0.15.3','0.15.4','0.15.5','0.15.6','0.15.7','0.15.8','0.16.0',VERSION):continue
             base.safe_file(ROOT/n)
             if sha(ROOT/n)!=record['files'][n]: raise RuntimeError('installed file changed:'+n)
-        if record.get('version')==VERSION:return 'same'
-        expected_marker = {'0.14.0':LEGACY_MARKER,'0.14.3':ADAPTIVE_MARKER,'0.14.4':ADAPTIVE_MARKER,'0.14.5':ADAPTIVE_MARKER,'0.14.6':FRESHNESS_MARKER,'0.14.7':SESSION_MARKER,'0.14.8':V0148_MARKER,'0.14.9':V0149_MARKER,'0.15.0':V0150_MARKER}.get(record.get('version'),PREVIOUS_MARKER)
+        if record.get('version')==VERSION and not app_missing:return 'same'
+        expected_marker = {'0.14.0':LEGACY_MARKER,'0.14.3':ADAPTIVE_MARKER,'0.14.4':ADAPTIVE_MARKER,'0.14.5':ADAPTIVE_MARKER,'0.14.6':FRESHNESS_MARKER,'0.14.7':SESSION_MARKER,'0.14.8':V0148_MARKER,'0.14.9':V0149_MARKER,'0.15.0':V0150_MARKER,'0.15.1':V0151_MARKER,'0.15.2':V0152_MARKER,'0.15.3':V0153_MARKER,'0.15.4':V0154_MARKER,'0.15.5':V0155_MARKER,'0.15.6':V0156_MARKER,'0.15.7':V0157_MARKER,'0.15.8':V0158_MARKER,'0.16.0':V0160_MARKER,VERSION:MARKER}.get(record.get('version'),PREVIOUS_MARKER)
         if expected_marker not in (ROOT/'nvmetrics-agent').read_bytes():raise RuntimeError('wrong previous agent')
-        if BACK.exists():raise RuntimeError('previous v0.16.0 backup exists')
+        if BACK.exists():raise RuntimeError('previous v0.16.1 backup exists')
         return 'upgrade'
     if BACK.exists() or RUNTIME.exists(): raise RuntimeError('unfinished or unknown package install; ask maintainer')
     if not base.PLIST.exists() and not base.MAN.exists():
@@ -258,15 +320,31 @@ def install(payload, uid):
                 raise RuntimeError('unqualified GPU: refuse migration of existing privileged controller')
         if state=='same':
             start_job();verify_client(uid,False) if not qualified else verify_client(uid);print('NVMetrics package already verified');return
-        # Acquire the physical lease BEFORE bootout; prevent new manual starts.
-        for path in base.LOCKS[1:]: held.append(acquire(path))
+        # Normally acquire physical locks BEFORE bootout, so a Manual owner
+        # cannot lose its guard. Exception: a verified post-fault daemon may
+        # retain the lease forever intentionally. It cannot start Manual again,
+        # and the rescue has independently verified AUTO. Only then is a
+        # controlled bootout safe, followed by re-acquisition of BOTH locks.
+        try:
+            for path in base.LOCKS[1:]: held.append(acquire(path))
+        except RuntimeError as exc:
+            for fd in reversed(held): os.close(fd)
+            held.clear()
+            session_busy=str(exc).startswith('installer_lock_busy:'+str(base.LOCKS[1]))
+            if not (state=='upgrade' and session_busy and retire_verified_latched_service(uid)):
+                raise
+            was_loaded=True
+            stopped=True
+            for path in base.LOCKS[1:]: held.append(acquire(path))
         if state in ('legacy','upgrade'): inspect_auto(ROOT/'nvmetrics-agent',qualified=True)
-        was_loaded=loaded()
-        if was_loaded: stopped=True;stop_job()
+        if loaded():
+            was_loaded=True
+            stopped=True
+            stop_job()
         held.append(acquire(ROOT/'control.lock'))
         if qualified:inspect_auto(agent,qualified=True)
         if state in ('legacy','upgrade'): inspect_auto(ROOT/'nvmetrics-agent',qualified=True)
-        backup_app=APP.parent/'.NVMetrics.app.before-v0160'
+        backup_app=BACK/'Previous.app'
         if os.path.lexists(backup_app): raise RuntimeError('previous app backup already exists')
         stage=Path(tempfile.mkdtemp(prefix='.pkg-stage-',dir=ROOT))
         appstage=Path(tempfile.mkdtemp(prefix='.nvmetrics-install-',dir=APP.parent))
