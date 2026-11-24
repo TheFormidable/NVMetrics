@@ -1,5 +1,6 @@
 import json
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -69,3 +70,19 @@ class DoctorTests(unittest.TestCase):
         with patch('sys.argv', ['runtime', 'doctor']), patch('doctor.main', return_value=0) as main:
             self.assertEqual(runtime.main(), 0)
             main.assert_called_once_with()
+
+    def test_fresh_monitor_snapshot_avoids_second_rusd_connection(self):
+        sample = {'t': time.time() * 1000, 'fan_rpm': [], 'temp_gpu_c': 45}
+        calls = []
+        def read(_, args):
+            calls.append(args)
+            return []
+        report = doctor.build_report(Path('/missing'), read=read, ping=lambda: {}, snapshot=sample)
+        self.assertNotIn(('once',), calls)
+        self.assertIn('Fan Stop', next(c['detail'] for c in report['checks'] if c['name'] == 'Ventilación'))
+        self.assertFalse(doctor.fresh_snapshot({'t': 1000}, now_ms=7000))
+        self.assertFalse(doctor.fresh_snapshot({'t': 1001}, now_ms=1000))
+        self.assertFalse(doctor.fresh_snapshot({'t': float('nan')}))
+        sample['t'] -= 6000
+        doctor.build_report(Path('/missing'), read=read, ping=lambda: {}, snapshot=sample)
+        self.assertIn(('once',), calls)

@@ -4,7 +4,7 @@ set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd -P)"
 REPO="${1:-$HERE/sources/NVMetrics}"
 DRIVER="${2:-$HOME/gpu-caps-phase2B}"
-OUT="${3:-$HOME/Desktop/NVMetrics-v0162-release}"
+OUT="${3:-$HOME/Desktop/NVMetrics-v0170-release}"
 [[ $(uname -s) == Darwin && $(uname -m) == x86_64 ]] || { echo 'Run on Intel macOS.' >&2; exit 2; }
 source "$HERE/find_build_python.sh"
 PYTHON="$(find_build_python)" || { echo 'No compatible build Python; run Build.command.' >&2; exit 2; }
@@ -44,7 +44,7 @@ done
 test -s "$APP/Contents/Resources/AppIcon.icns"
 AGENT="$APP/Contents/Resources/nvmetrics-agent"
 test -x "$AGENT"
-strings "$AGENT" | grep 'NVMETRICS_RM_V0162_DIAGNOSTICS' >/dev/null
+strings "$AGENT" | grep 'NVMETRICS_RM_V0170_DIAGNOSTICS' >/dev/null
 # No hardware call: marker must come from the real, ABI-enabled implementation.
 strings "$AGENT" | grep -F 'NVMETRICS_GPU_CAPS_COMPILED' >/dev/null
 # The root guard must carry the RUSD flight recorder and its instrumented reader (diagnostic, 0.15.7).
@@ -79,7 +79,7 @@ chmod +x "$GUARD/Runtime/nvmetrics-runtime"
 import plistlib,sys
 from pathlib import Path
 p=Path(sys.argv[1]);obj=plistlib.loads(p.read_bytes())
-obj['CFBundleShortVersionString']='0.16.2';obj['CFBundleVersion']='0.16.2'
+obj['CFBundleShortVersionString']='0.17.0';obj['CFBundleVersion']='0.17.0'
 obj['CFBundleIconFile']='AppIcon.icns'
 p.write_bytes(plistlib.dumps(obj))
 PY
@@ -113,12 +113,12 @@ PY
 "$PYTHON" -B "$HERE/verify_package_payload.py" render "$STAGE/scripts"
 echo 'Checking native ZIP round-trip before pkgbuild…'
 NVMETRICS_BUILD_PYTHON="$PYTHON" "$HERE/verify_scripts.sh" "$STAGE/scripts" "$STAGE/roundtrip" "$STAGE/payload"
-PKG="$OUT/NVMetrics-0.16.2-Candidate-Intel.pkg"
+PKG="$OUT/NVMetrics-0.17.0-Candidate-Intel.pkg"
 [[ ! -e "$PKG" ]] || { echo 'Output package already exists; choose a new directory.' >&2; exit 2; }
 CANDIDATE="$STAGE/candidate.pkg"
 PKG_ARGS=()
 if [[ -n "${NVMETRICS_INSTALLER_IDENTITY:-}" ]]; then PKG_ARGS=(--sign "$NVMETRICS_INSTALLER_IDENTITY"); fi
-/usr/bin/pkgbuild --nopayload --identifier org.nvmetrics.installer --version 0.16.2 \
+/usr/bin/pkgbuild --nopayload --identifier org.nvmetrics.installer --version 0.17.0 \
   --scripts "$STAGE/scripts" ${PKG_ARGS[@]+"${PKG_ARGS[@]}"} "$CANDIDATE"
 # Verify the actual package, not just the staging directory.
 NVMETRICS_BUILD_PYTHON="$PYTHON" "$HERE/verify_package.sh" "$CANDIDATE" "$STAGE/scripts/payload.zip"

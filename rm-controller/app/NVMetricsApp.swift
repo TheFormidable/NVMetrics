@@ -48,7 +48,10 @@ struct NVMetricsApp: App {
             FirmwareCurveView().environmentObject(recorder)
         }.windowResizability(.contentSize)
         Window("NVMetrics Doctor", id: "doctor") {
-            DoctorView()
+            DoctorView().environmentObject(agent)
+        }
+        Window("NVMetrics Gaming Lab", id: "gaming-lab") {
+            GamingView().environmentObject(agent).environmentObject(fanGuard)
         }
     }
 }

@@ -19,7 +19,7 @@ printf 'Developer Python: %s (%s)\n' "$PY" "$("$PY" --version)"
 [[ $# -le 3 ]] || { echo 'Usage: Build.command [NVMetrics source] [driver source] [output]' >&2; exit 2; }
 REPO="$("$PY" -B "$HERE/build_sources.py" repo "${1:-$HERE/sources/NVMetrics}")"
 DRIVER="$("$PY" -B "$HERE/build_sources.py" driver-caps "${2:-$HOME/gpu-caps-phase2B}")"
-OUT="${3:-$HOME/Desktop/NVMetrics-v0162-release}"
+OUT="${3:-$HOME/Desktop/NVMetrics-v0170-release}"
 printf 'NVMetrics source: %s\nDriver source: %s\nOutput: %s\n' "$REPO" "$DRIVER" "$OUT"
 TEMP="$(mktemp -d)"
 trap 'rm -rf "$TEMP"' EXIT

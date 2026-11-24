@@ -15,6 +15,7 @@ private struct DoctorReport: Decodable {
 }
 
 struct DoctorView: View {
+    @EnvironmentObject private var agent: Agent
     @State private var report: DoctorReport?
     @State private var busy = false
     @State private var error: String?
@@ -62,8 +63,11 @@ struct DoctorView: View {
         guard !busy else { return }
         busy = true; error = nil; report = nil
         let path = Agent.resources.appendingPathComponent("GuardTools/Runtime/nvmetrics-runtime").path
+        let snapshot = agent.latestRaw
         Task { @MainActor in
-            let result = await Task.detached(priority: .utility) { Controls.runFull(path, ["doctor"]) }.value
+            let result = await Task.detached(priority: .utility) {
+                Controls.runFull(path, snapshot == nil ? ["doctor"] : ["doctor", "--snapshot"], stdin: snapshot)
+            }.value
             if result.0 == 0, let decoded = try? JSONDecoder().decode(DoctorReport.self, from: Data(result.1.utf8)), decoded.schema == 1 {
                 report = decoded
             } else { error = "No se pudo completar el diagnóstico. Comprueba la instalación de NVMetrics." }

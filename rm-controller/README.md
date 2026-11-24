@@ -1,3 +1,7 @@
+# NVMetrics 0.17.0 — Carbon + Gaming Lab
+
+Conserva la base 0.16.2 validada en RTX 5050. Abre **Gaming Lab** desde el menú o Ajustes para elegir perfiles, grabar datos de GPU y analizar frametimes. El nuevo paquete requiere Phase2B y actualiza 0.16.2. Salida: `~/Desktop/NVMetrics-v0170-release/NVMetrics-0.17.0-Candidate-Intel.pkg`. Véase [guía de rendimiento](GAMING-LAB.md). Candidato pendiente de validación nativa.
+
 # NVMetrics 0.16.2 — Carbon + GPU Caps
 
 Candidato basado en 0.15.8 (`ff97457`): conserva UI Carbon, icono, Flight Recorder, reintento RUSD y guard manual. Migra desde 0.15.8 y 0.16.1 con UID, hashes y AUTO verificados. Ejecuta `Build.command` con el checkout compatible Phase2B (por defecto `~/gpu-caps-phase2B`); salida `~/Desktop/NVMetrics-v0162-release/NVMetrics-0.16.2-Candidate-Intel.pkg`. La fuente histórica incluida sigue disponible para pruebas, pero no contiene GPU Caps; el paquete ahora exige que el encabezado extraído coincida con el del kext. Doctor distingue fallos y cuenta capacidades verificadas sin conceder permisos. No incluye el descenso directo 0.15.9. Pendiente de validación del paquete nativo.

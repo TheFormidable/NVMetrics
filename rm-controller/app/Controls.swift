@@ -37,6 +37,7 @@ final class Controls: ObservableObject {
 
     private var revision = 0
     private var refreshing = false
+    private var refreshedAt: TimeInterval = -100
     private let execute: @Sendable (String, [String]) -> (Int32, String, String)
     init(execute: @escaping @Sendable (String, [String]) -> (Int32, String, String) = { Controls.runFull($0, $1) }) {
         self.execute = execute
@@ -46,7 +47,8 @@ final class Controls: ObservableObject {
     nonisolated private static let privilegedRoot = "/Library/PrivilegedHelperTools/org.nvmetrics.rmguard/"
 
     func refresh() {
-        guard !busy && !refreshing else { return }
+        guard !busy && !refreshing &&
+              ProcessInfo.processInfo.systemUptime - refreshedAt >= 2 else { return }
         refreshing = true
         let requestedRevision = revision
         Task.detached { [setting, execute] in
@@ -56,6 +58,7 @@ final class Controls: ObservableObject {
             await MainActor.run {
                 self.refreshing = false
                 guard self.revision == requestedRevision && !self.busy else { return }
+                self.refreshedAt = ProcessInfo.processInfo.systemUptime
                 let conf = r.0 == 0 ? Controls.field(r.1, "reposo") : nil
                 let policy = p.0 == 0 ? Controls.field(p.1, "policy") : nil
                 self.reposo = Controls.reposoState(conf: conf, policy: policy)
@@ -141,6 +144,7 @@ final class Controls: ObservableObject {
                        done: @escaping @MainActor @Sendable (String) -> Void) {
         guard !busy else { return }
         revision += 1
+        refreshedAt = -100
         busy = true
         Task.detached { [execute] in
             let clean = ["/usr/bin/env", "-i", "PATH=/usr/bin:/bin:/usr/sbin:/sbin", "HOME=/var/root", "LANG=C"]
@@ -168,12 +172,14 @@ final class Controls: ObservableObject {
 
     nonisolated static func run(_ path: String, _ args: [String]) -> String { runFull(path, args).1 }
 
-    nonisolated static func runFull(_ path: String, _ args: [String]) -> (Int32, String, String) {
+    nonisolated static func runFull(_ path: String, _ args: [String], stdin: Data? = nil) -> (Int32, String, String) {
         let p = Process(), out = Pipe(), err = Pipe()
+        let input = stdin.map { _ in Pipe() }
         p.executableURL = URL(fileURLWithPath: path)
         p.arguments = args
         p.standardOutput = out
         p.standardError = err
+        if let input { p.standardInput = input }
         guard (try? p.run()) != nil else { return (-1, "", "no se pudo ejecutar \(path)") }
         // Drain both pipes together. A full stderr pipe otherwise blocks the
         // child while this thread waits for stdout EOF (including fan IPC).
@@ -184,6 +190,10 @@ final class Controls: ObservableObject {
                 captured.put(pipe.fileHandleForReading.readDataToEndOfFile(), at: index)
                 group.leave()
             }
+        }
+        if let input, let stdin {
+            try? input.fileHandleForWriting.write(contentsOf: stdin)
+            try? input.fileHandleForWriting.close()
         }
         p.waitUntilExit()
         group.wait()

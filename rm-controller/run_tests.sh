@@ -10,7 +10,7 @@ T="$(mktemp -d)"
 trap 'rm -rf "$T"' EXIT
 export CLANG_MODULE_CACHE_PATH="$T/modules"
 "$PYTHON" -B -m unittest discover -s "$HERE/tests" -v
-for test in test_thermal_policy test_guard_header_compile test_sensor_reader test_policy_cli; do
+for test in test_thermal_policy test_guard_header_compile test_sensor_reader test_policy_cli test_monitor_interval; do
   xcrun clang -std=c11 -Wall -Wno-unused-function -I "$HERE/agent" -I "$HERE/tests" "$HERE/tests/$test.c" -o "$T/$test"
   "$T/$test"
 done
@@ -23,6 +23,8 @@ xcrun swiftc -module-cache-path "$T/modules" -swift-version 5 -parse-as-library 
 "$T/test_menu"
 xcrun swiftc -module-cache-path "$T/modules" -swift-version 5 -parse-as-library "$HERE/app/Sample.swift" "$HERE/tests/test_gpu_profile.swift" -o "$T/test_gpu_profile"
 "$T/test_gpu_profile"
+xcrun swiftc -module-cache-path "$T/modules" -swift-version 5 -parse-as-library "$HERE/app/Sample.swift" "$HERE/app/AdaptiveCadence.swift" "$HERE/app/GamingCapture.swift" "$HERE/tests/test_gaming_capture.swift" -o "$T/test_gaming_capture"
+"$T/test_gaming_capture"
 # Run the original C/shell suites against the exact bundled base and patched
 # NVIDIA headers. Copy into a temporary checkout to preserve bundled sources.
 /usr/bin/ditto "$HERE/sources/NVMetrics" "$T/base"

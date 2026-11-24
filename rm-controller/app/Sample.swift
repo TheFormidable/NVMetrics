@@ -24,6 +24,7 @@ struct Sample: Decodable, Equatable {
     var fan_rpm: [Int]?
     var fan_live: FanLive?          // v0.2: solo lectura
     var gpu_profile: GPUObservationProfile?
+    var display_flip_count: UInt64?
     var vram_total_mib: Int?
     var vram_used_mib: Int?
     var health: Health?            // null or missing: the driver has no health counters (before 3.0) or an older agent

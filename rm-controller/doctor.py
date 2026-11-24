@@ -10,6 +10,7 @@ import math
 import platform
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 from nvmetrics_ipc_v08 import request
@@ -33,7 +34,17 @@ def read_agent(agent, args):
         return []
 
 
-def build_report(agent, read=read_agent, ping=lambda: request('ping', timeout=3)):
+def fresh_snapshot(sample, now_ms=None):
+    if type(sample) is not dict:
+        return False
+    stamp = sample.get('t')
+    if type(stamp) not in (int, float) or not 0 < stamp < 1e15:
+        return False
+    age = (time.time() * 1000 if now_ms is None else now_ms) - stamp
+    return 0 <= age <= 5000
+
+
+def build_report(agent, read=read_agent, ping=lambda: request('ping', timeout=3), snapshot=None):
     checks = []
 
     def add(name, status, detail):
@@ -43,8 +54,11 @@ def build_report(agent, read=read_agent, ping=lambda: request('ping', timeout=3)
         add('Agente', 'error', 'El ejecutable integrado no existe.')
     else:
         add('Agente', 'ok', 'Ejecutable integrado encontrado.')
-    samples = read(agent, ('once',))
+    reused = fresh_snapshot(snapshot)
+    samples = [snapshot] if reused else read(agent, ('once',))
     sample = samples[-1] if samples else {}
+    add('Fuente de telemetría', 'info', 'Muestra reciente del monitor (sin abrir otra conexión RUSD).'
+        if reused else 'Lectura directa del agente.')
     def numeric(value):
         return type(value) is int or (type(value) is float and math.isfinite(value))
 
@@ -63,6 +77,14 @@ def build_report(agent, read=read_agent, ping=lambda: request('ping', timeout=3)
         slots = [str(i) for i in range(16) if type(mask) is int and 0 <= mask <= 65535 and mask & (1 << i)]
         add('Tacómetros', 'ok' if slots else 'unknown',
             'Slots observados: ' + ', '.join(slots) + ' (no indica número físico de ventiladores).' if slots else 'Sin slots confirmados; no implica Fan Stop.')
+        rpm = sample.get('fan_rpm')
+        if type(rpm) is list and all(type(v) is int and v >= 0 for v in rpm):
+            if any(rpm):
+                add('Ventilación', 'ok', 'RUSD informa rotación; no certifica el número físico de ventiladores.')
+            else:
+                add('Ventilación', 'info', 'RUSD informa cero RPM; compatible con Fan Stop, no confirmado físicamente.')
+        else:
+            add('Ventilación', 'unknown', 'Lectura RPM ausente o inválida; no implica Fan Stop.')
         health = sample.get('health')
         for key, label in (('xid_count', 'Errores Xid'), ('bugchecks', 'Fallos de firmware'), ('rm_asserts', 'RM asserts')):
             count = health.get(key) if type(health) is dict else None
@@ -100,6 +122,14 @@ def build_report(agent, read=read_agent, ping=lambda: request('ping', timeout=3)
     add('GPU Caps ABI', 'ok' if states and all(s == 'usable' for s in states)
         else 'warn' if any(s != 'unknown' for s in states) else 'unknown',
         '; '.join(details) if details else 'ABI no disponible. No concede permisos de escritura.')
+    if len(caps) == 1 and states == ['usable']:
+        facts = caps[0].get('capabilities')
+        if type(facts) is list:
+            for key, label in (('CHIP_NAME', 'Chip'), ('RM_VERSION', 'Versión RM'), ('GSP_FW_VERSION', 'Firmware GSP')):
+                value = next((f.get('value') for f in facts if type(f) is dict and
+                              f.get('name') == key and f.get('state') == 'verified'), None)
+                valid = type(value) is str and 0 < len(value) <= 64 and all(c.isalnum() or c in '.-_ ' for c in value)
+                add(label, 'ok' if valid else 'unknown', value if valid else 'No verificado por la ABI.')
     for args, key, allowed, label in ((('eco', 'status'), 'eco', ('on', 'off'), 'Eco'),
                                       (('policy', 'status'), 'policy', ('idle', 'normal', 'undecided'), 'Política de boost')):
         rows = read(agent, args)
@@ -119,9 +149,17 @@ def build_report(agent, read=read_agent, ping=lambda: request('ping', timeout=3)
 
 
 def main():
-    if len(sys.argv) != 1 or sys.platform != 'darwin' or not getattr(sys, 'frozen', False):
+    if sys.argv[1:] not in ([], ['--snapshot']) or sys.platform != 'darwin' or not getattr(sys, 'frozen', False):
         print('Doctor requiere el runtime integrado de NVMetrics en macOS.', file=sys.stderr)
         return 2
     agent = Path(sys.executable).parent.parent.parent / 'nvmetrics-agent'
-    print(json.dumps(build_report(agent), ensure_ascii=False, allow_nan=False))
+    sample = None
+    if sys.argv[1:] == ['--snapshot']:
+        try:
+            raw = sys.stdin.buffer.read(65537)
+            if len(raw) <= 65536:
+                sample = json.loads(raw)
+        except (OSError, ValueError):
+            pass
+    print(json.dumps(build_report(agent, snapshot=sample), ensure_ascii=False, allow_nan=False))
     return 0

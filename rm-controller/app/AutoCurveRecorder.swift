@@ -30,7 +30,7 @@ struct AutoCurvePoint: Codable, Identifiable, Sendable {
 final class AutoCurveRecorder: ObservableObject {
     @Published private(set) var points: [AutoCurvePoint] = []
     @Published private(set) var status = "Esperando primera lectura AUTO"
-    @Published var enabled = true {
+    @Published var enabled = false {
         didSet { UserDefaults.standard.set(enabled, forKey: "nvmetrics.autoObservation.enabled") }
     }
     private var loop: Task<Void, Never>?

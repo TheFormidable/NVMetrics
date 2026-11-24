@@ -30,8 +30,11 @@ struct MainView: View {
                         details
                     case "Ajustes":
                         BoostCard()
+                        Button("Gaming Lab y perfiles…") { openWindow(id: "gaming-lab"); NSApp.activate(ignoringOtherApps: true) }
                         details
-                        Picker("Intervalo de lectura", selection: $agent.intervalMs) {
+                        Picker("Intervalo de lectura", selection: Binding(get: { agent.intervalMs }, set: {
+                            agent.adaptiveCadence = false; agent.intervalMs = $0
+                        })) {
                             Text("0,5 s").tag(500); Text("1 s").tag(1000); Text("2 s").tag(2000)
                         }.pickerStyle(.segmented)
                     default:
@@ -461,6 +464,7 @@ struct MenuContent: View {
         Button("Abrir NVMetrics") { openWindow(id: "main-carbon"); NSApp.activate(ignoringOtherApps: true) }
             .keyboardShortcut("o")
         Button("Diagnóstico…") { openWindow(id: "doctor"); NSApp.activate(ignoringOtherApps: true) }
+        Button("Gaming Lab…") { openWindow(id: "gaming-lab"); NSApp.activate(ignoringOtherApps: true) }
         Button("Salir") { NSApp.terminate(nil) }.keyboardShortcut("q")
     }
 

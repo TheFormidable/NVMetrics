@@ -2,7 +2,7 @@
 
 Referencia: [thanhnndev/rog-control-macos](https://github.com/thanhnndev/rog-control-macos), `AsusWmi`, `RogControl.swift`, `AmdCppcPolicy.c`, `docs/ASUSCTL-MACOS.md` y `docs/CPU-POWER.md`. No se copia código ASUS ni se introduce otro kext. El código de NVMetrics sigue usando NVRM, RUSD, GPU Caps y el supervisor RM existente. Se conserva el dashboard, icono y tema.
 
-## Candidato 0.16.2
+## Candidato 0.17.0
 
 | Idea de referencia | Adaptación | Estado |
 |---|---|---|
@@ -10,8 +10,8 @@ Referencia: [thanhnndev/rog-control-macos](https://github.com/thanhnndev/rog-con
 | Estado desconocido explícito | Datos ausentes no son cero ni demuestran Fan Stop; Doctor no infiere permisos | Implementado |
 | Recuperación después de wake | Reinicio del agente de monitorización, sin reactivar Manual | Implementado; validar sueño real |
 | Límite de trabajo del monitor | Tramas de hasta 64 KiB, historial de hasta 1200 muestras y 5 minutos; descartar datos antiguos | Implementado; validar macOS |
-| Backend separado | Se mantiene C + supervisor Python/rescate y SwiftUI; plazo absoluto IPC | Implementado parcialmente |
-| Versión y migración | Marcador nuevo, copias independientes, pruebas 0.15.8/0.16.1 → 0.16.2 | Simulación probada |
+| Backend separado | Se mantiene C + supervisor Python/rescate y SwiftUI; plazo absoluto IPC; monitor único con cadencia sin reconectar y Doctor compartiendo muestra reciente | Implementado parcialmente |
+| Versión y migración | Marcador nuevo, copias independientes, pruebas 0.16.2 → 0.17.0 | Simulación probada |
 | Comprobaciones sin hardware | Python y typecheck del overlay real en macOS CI | Implementado |
 
 Doctor se ejecuta desde el menú Diagnóstico o, sin sudo, mediante:

@@ -43,7 +43,23 @@ final class Agent: ObservableObject {
         guard latest != nil, let start = sessionStartedAt else { return [] }
         return history.filter { $0.t >= start }
     }
-    @Published var intervalMs: Int = 500 { didSet { if oldValue != intervalMs { restart() } } }
+    @Published var intervalMs: Int = Agent.savedInterval() {
+        didSet {
+            guard oldValue != intervalMs else { return }
+            UserDefaults.standard.set(intervalMs, forKey: "nvmetrics.telemetry.interval")
+            sendControl("interval \(intervalMs)")
+        }
+    }
+    @Published var adaptiveCadence = UserDefaults.standard.bool(forKey: "nvmetrics.telemetry.adaptive") {
+        didSet {
+            cadence.reset()
+            UserDefaults.standard.set(adaptiveCadence, forKey: "nvmetrics.telemetry.adaptive")
+        }
+    }
+    private var cadence = AdaptiveCadence()
+    // Accepted raw sample for the read-only Doctor; cleared with the generation.
+    private(set) var latestRaw: Data?
+    private(set) var displayFlipRate: Double?
     @Published var boostMode: BoostMode = Agent.savedBoostMode() {
         didSet {
             UserDefaults.standard.set(boostMode.rawValue, forKey: "nvmetrics.boostMode")
@@ -71,6 +87,10 @@ final class Agent: ObservableObject {
 
     nonisolated static func savedBoostMode() -> BoostMode {
         BoostMode(rawValue: UserDefaults.standard.string(forKey: "nvmetrics.boostMode") ?? "") ?? .auto
+    }
+    nonisolated static func savedInterval() -> Int {
+        let value = UserDefaults.standard.integer(forKey: "nvmetrics.telemetry.interval")
+        return [500, 1000, 2000].contains(value) ? value : 500
     }
 
     init() {
@@ -154,6 +174,9 @@ final class Agent: ObservableObject {
         watchdog?.cancel(); watchdog = nil
         stopping = true
         latest = nil
+        latestRaw = nil
+        displayFlipRate = nil
+        cadence.reset()
         sessionStartedAt = nil
         buffer.removeAll()
         discardingFrame = false
@@ -169,10 +192,14 @@ final class Agent: ObservableObject {
 
     /// tells the running agent the boost mode; a no-op while none runs (start() sends it)
     private func sendBoost() {
-        guard let input else { return }
+        sendControl("boost \(boostMode.rawValue)")
+    }
+
+    private func sendControl(_ line: String) {
+        guard let input, !stopping else { return }
         // throwing write: a dead reader gives EPIPE here (SIGPIPE is ignored), which needs no handling: the
         // termination handler restarts the agent and start() sends the mode again
-        try? input.write(contentsOf: Data("boost \(boostMode.rawValue)\n".utf8))
+        try? input.write(contentsOf: Data((line + "\n").utf8))
     }
 
     private func closeInput() {
@@ -190,6 +217,9 @@ final class Agent: ObservableObject {
         watchdog?.cancel(); watchdog = nil
         closeInput()
         latest = nil          // no agent, no current reading: no stale alerts or "⚠︎", and the driver notice can show
+        latestRaw = nil
+        displayFlipRate = nil
+        cadence.reset()
         sessionStartedAt = nil
         buffer.removeAll()    // a half line from the dead agent must not prefix the next agent's first line
         discardingFrame = false
@@ -231,6 +261,8 @@ final class Agent: ObservableObject {
                 previouslyObservedFanCount = observed
                 UserDefaults.standard.set(observed, forKey: "nvmetrics.fan.observedSlots")
             }
+            latestRaw = line
+            displayFlipRate = GamingCapture.flipRate(previous: latest, next: s)
             latest = s
             problem = nil
             retryDelay = 2
@@ -238,6 +270,8 @@ final class Agent: ObservableObject {
             let cutoff = s.t - 5 * 60 * 1000
             if let first = history.firstIndex(where: { $0.t >= cutoff }), first > 0 { history.removeFirst(first) }
             if history.count > 1_200 { history.removeFirst(history.count - 1_200) }
+            if adaptiveCadence, let next = cadence.next(utilization: s.util_gpu_pct,
+                now: lastSampleAt, current: intervalMs) { intervalMs = next }
         }
         if buffer.count > 65_536 { buffer.removeAll(); discardingFrame = true; problem = "Trama de telemetría demasiado grande." }
     }

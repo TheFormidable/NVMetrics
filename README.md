@@ -2,9 +2,9 @@
 
 Monitor y controlador supervisado de GPU NVIDIA para macOS Intel con NullMoth. **El código de desarrollo actual reside en [`rm-controller/`](rm-controller/README.md).**
 
-## Candidato 0.16.2
+## Candidato 0.17.0
 
-Sobre Carbon 0.15.8: conserva el dashboard, icono, guard RUSD y Flight Recorder. Integra Doctor, recuperación de telemetría y validación obligatoria de GPU Caps; admite migración verificada desde 0.15.8 y 0.16.1. No incluye el descenso directo experimental de 0.15.9.
+Sobre Carbon 0.15.8 y la revisión validada 0.16.2: conserva dashboard, icono, guard RUSD y Flight Recorder. Añade cadencia adaptativa sin reconectar NVRM, Doctor con telemetría compartida, Gaming Lab y perfiles explícitos. Migración verificada desde 0.16.2. No incluye el descenso directo experimental de 0.15.9.
 
 ## Estructura del proyecto
 
@@ -28,7 +28,7 @@ En macOS **Intel x86_64**, con el checkout del driver compatible y las herramien
 bash rm-controller/Build.command \
   "$PWD/rm-controller/sources/NVMetrics" \
   "$HOME/gpu-caps-phase2B" \
-  "$PWD/release-v0162"
+  "$PWD/release-v0170"
 ```
 
 El checkout Phase2B debe incluir `kexts/NVRM/nvrm_gpu_capabilities_abi.h` y el encabezado equivalente en su cadena de parches NVK. El instalador resultante se genera **fuera del árbol versionado**, en el directorio de salida elegido. Antes de instalar o probar control manual, verifica el estado AUTO. No es una versión certificada para control de ventiladores universal; consulta [seguridad](SECURITY.md) y [GPU Caps](rm-controller/GPU-CAPS.md).
